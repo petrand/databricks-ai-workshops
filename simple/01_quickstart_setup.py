@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "1"
+# ///
 # MAGIC %md
 # MAGIC # FreshMart Workshop Setup
 # MAGIC
@@ -24,7 +28,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-vectorsearch
+# MAGIC %pip install databricks-vectorsearch 
 # MAGIC %restart_python
 
 # COMMAND ----------
@@ -48,7 +52,7 @@ print(f"Using schema: {FULL_SCHEMA}")
 
 # COMMAND ----------
 
-# spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
+# spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}") # Only if you have access to create catalog and want to have a new catalog for the workshop
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {FULL_SCHEMA}")
 print(f"Catalog '{CATALOG}' and schema '{FULL_SCHEMA}' are ready.")
 
@@ -581,9 +585,10 @@ print(f"Endpoint '{VS_ENDPOINT_NAME}' is ready.")
 
 # COMMAND ----------
 
-# MAGIC %sql 
-# MAGIC ALTER TABLE qsic_workshop_prep_catalog.level_100_testing.policy_docs_chunked
-# MAGIC   SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+spark.sql(f"""
+ALTER TABLE {FULL_SCHEMA}.policy_docs_chunked
+  SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+""")
 
 # COMMAND ----------
 
@@ -593,7 +598,7 @@ client = VectorSearchClient()
 
 index = client.create_delta_sync_index(
   endpoint_name=VS_ENDPOINT_NAME,
-  source_table_name="qsic_workshop_prep_catalog.level_100_testing.policy_docs_chunked",
+  source_table_name=f"{FULL_SCHEMA}.policy_docs_chunked",
   index_name=VS_INDEX_NAME,
   pipeline_type="TRIGGERED",
   primary_key="chunk_id",
@@ -644,7 +649,7 @@ else:
     if not genie_space_id:
         print(f"Creating Genie Space '{GENIE_SPACE_TITLE}'...")
         serialized = json.dumps({
-            "version": 1,
+            "version": 2,
             "data_sources": {
                 "tables": [{"identifier": t} for t in sorted(table_identifiers)]
             }
