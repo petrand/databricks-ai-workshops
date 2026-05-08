@@ -1,0 +1,52 @@
+bundle:
+  name: agent_openai_sdk
+
+resources:
+  apps:
+    agent_openai_sdk:
+      name: "db-workshopp-l100-agent"
+      description: "FreshMart Agent - OpenAI Agents SDK"
+      source_code_path: ./
+      config:
+        command: ["uv", "run", "start-app"]
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "databricks"
+          - name: MLFLOW_REGISTRY_URI
+            value: "databricks-uc"
+          - name: API_PROXY
+            value: "http://localhost:8000/invocations"
+          - name: CHAT_APP_PORT
+            value: "3000"
+          - name: CHAT_PROXY_TIMEOUT_SECONDS
+            value: "300"
+          - name: MLFLOW_EXPERIMENT_ID
+            value_from: "experiment"
+
+      # Resources which this app has access to
+      resources:
+        - name: 'experiment'
+          experiment:
+            experiment_id: "1906606050275437"
+            permission: 'CAN_MANAGE'
+        - name: 'genie-space'
+          genie_space:
+            name: "FreshMart Retail Data"
+            space_id: "01f149bc27281790b7ee970134092bf7"
+            permission: 'CAN_RUN'
+
+targets:
+  dev:
+    mode: development
+    default: true
+    # workspace:
+    #   host: https://...
+
+  prod:
+    mode: production
+    # workspace:
+    #   host: https://...
+    resources:
+      apps:
+        agent_openai_sdk:
+          name: db-workshopp-l100-agent
