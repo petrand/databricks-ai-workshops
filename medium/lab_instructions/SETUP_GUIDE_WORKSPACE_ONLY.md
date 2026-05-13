@@ -99,6 +99,154 @@ You need two paths that tell the app where your database lives. To find them:
 
 ---
 
+## Step 3 (Alternative): Using a Lakebase Provisioned Instance
+
+If your workspace uses a **Provisioned** Lakebase instance (instead of Autoscaling), follow these steps instead of Step 3 above. Then skip to Step 4.
+
+### Create the instance
+
+1. In the left sidebar, go to **Compute** → **Lakebase**
+2. Click **Create** → choose **Provisioned**
+3. Name it something memorable (e.g., `my-agent-workshop`)
+4. Select a capacity (e.g., `CU_1` for the smallest size)
+5. Click Create and wait for it to show as "Running"
+
+### Find your instance name
+
+The only value you need is the **instance name** — this is simply the name you chose when creating it (e.g., `my-agent-workshop`). No branch or database path is needed for provisioned instances.
+
+### How the `databricks.yml` changes differ for provisioned
+
+When you get to Step 5a, you'll need to make different edits than what the Autoscaling instructions show. Here's what to change:
+
+**1. Replace the `postgres` resource with a `database` resource:**
+
+Change the resources section from:
+
+```yaml
+      resources:
+        - name: 'experiment'
+          experiment:
+            experiment_id: "<your-experiment-id>"
+            permission: 'CAN_MANAGE'
+        - name: 'postgres'
+          postgres:
+            branch: "projects/<your-project>/branches/production"
+            database: "projects/<your-project>/branches/production/databases/<your-database-id>"
+            permission: 'CAN_CONNECT_AND_CREATE'
+```
+
+To:
+
+```yaml
+      resources:
+        - name: 'experiment'
+          experiment:
+            experiment_id: "<your-experiment-id>"
+            permission: 'CAN_MANAGE'
+        - name: 'database'
+          database:
+            database_name: databricks_postgres
+            instance_name: 'my-agent-workshop'
+            permission: CAN_CONNECT_AND_CREATE
+```
+
+Replace `my-agent-workshop` with your actual provisioned instance name.
+
+**2. Replace the `LAKEBASE_AUTOSCALING_ENDPOINT` env var with `LAKEBASE_INSTANCE_NAME`:**
+
+In the `env:` section, change:
+
+```yaml
+          - name: LAKEBASE_AUTOSCALING_ENDPOINT
+            value_from: "postgres"
+```
+
+To:
+
+```yaml
+          - name: LAKEBASE_INSTANCE_NAME
+            value: "my-agent-workshop"
+```
+
+Replace `my-agent-workshop` with your actual provisioned instance name.
+
+**Full `databricks.yml` example for provisioned:**
+
+```yaml
+bundle:
+  name: agent_openai_agents_sdk
+
+resources:
+  apps:
+    agent_openai_agents_sdk:
+      name: "agent-workshop-jsmith"
+      description: "OpenAI Agents SDK agent application"
+      source_code_path: ./
+      config:
+        command: ["uv", "run", "start-app"]
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "databricks"
+          - name: MLFLOW_REGISTRY_URI
+            value: "databricks-uc"
+          - name: API_PROXY
+            value: "http://localhost:8000/invocations"
+          - name: CHAT_APP_PORT
+            value: "3000"
+          - name: CHAT_PROXY_TIMEOUT_SECONDS
+            value: "300"
+          - name: MLFLOW_EXPERIMENT_ID
+            value_from: "experiment"
+          - name: LAKEBASE_INSTANCE_NAME
+            value: "my-agent-workshop"
+          - name: LAKEBASE_AGENT_MEMORY_SCHEMA
+            value: "agent_openai_memory"
+          - name: PGDATABASE
+            value: "databricks_postgres"
+          - name: PGPORT
+            value: "5432"
+
+      resources:
+        - name: 'experiment'
+          experiment:
+            experiment_id: "1234567890123456"
+            permission: 'CAN_MANAGE'
+        - name: 'database'
+          database:
+            database_name: databricks_postgres
+            instance_name: 'my-agent-workshop'
+            permission: CAN_CONNECT_AND_CREATE
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://my-workspace.cloud.databricks.com
+  prod:
+    mode: production
+    workspace:
+      host: https://my-workspace.cloud.databricks.com
+    resources:
+      apps:
+        agent_openai_agents_sdk:
+          name: agent-workshop-jsmith
+```
+
+### Quick comparison: Autoscaling vs. Provisioned
+
+| Aspect | Autoscaling (Step 3 above) | Provisioned (this section) |
+|---|---|---|
+| Resource type in `databricks.yml` | `postgres` with `branch:` and `database:` | `database` with `instance_name:` and `database_name:` |
+| Environment variable | `LAKEBASE_AUTOSCALING_ENDPOINT` (value_from resource) | `LAKEBASE_INSTANCE_NAME` (hardcoded value) |
+| What you need from Lakebase UI | Branch path + Database path (from notebook Cell 3) | Just the instance name you chose |
+| Lakebase setup notebook | Run Cell 3 to find database ID | Not needed |
+
+> **Note:** Everything else (Step 5b editing `agent.py`, Step 6 deployment, Step 7 verification) remains exactly the same regardless of which Lakebase type you use.
+
+---
+
 ## Step 4: Confirm the MLflow Experiment ID
 
 The data setup notebook (Step 2) already created an MLflow experiment for you. You just need to confirm the **Experiment ID** (a number you'll paste into a config file).
