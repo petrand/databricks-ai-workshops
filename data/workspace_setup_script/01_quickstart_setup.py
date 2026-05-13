@@ -458,7 +458,7 @@ sys.path.insert(0, f"/Workspace{notebook_dir}")
 
 from generate_edu_policy_docs import generate_docs, EDU_POLICY_DOCS
 
-edu_docs_dir = os.path.join(os.path.dirname(os.path.abspath(".")), "data", "edu_policy_docs")
+edu_docs_dir = os.path.join(os.path.dirname(os.path.abspath(".")), "edu_policy_docs")
 generate_docs(edu_docs_dir)
 print(f"Created {len(EDU_POLICY_DOCS)} policy documents in: {edu_docs_dir}")
 
@@ -486,12 +486,12 @@ docs_dir = f"/Workspace{repo_root}/data/edu_policy_docs"
 
 # Fallback: try relative path if running locally or in a different context
 if not os.path.isdir(docs_dir):
-    docs_dir = os.path.join(os.path.dirname(os.path.abspath(".")), "data", "edu_policy_docs")
+    docs_dir = os.path.join(os.path.dirname(os.path.abspath(".")), "edu_policy_docs")
 if not os.path.isdir(docs_dir):
     raise FileNotFoundError(
         f"Could not find policy_docs directory. Looked in:\n"
         f"  /Workspace{repo_root}/data/edu_policy_docs\n"
-        f"  {os.path.join(os.path.dirname(os.path.abspath('.')), 'data', 'edu_policy_docs')}\n"
+        f"  {os.path.join(os.path.dirname(os.path.abspath('.')), 'edu_policy_docs')}\n"
         f"Make sure you cloned the full repository."
     )
 
