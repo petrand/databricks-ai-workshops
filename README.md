@@ -9,10 +9,23 @@
 | Level | What You'll Build | Duration | Get Started |
 |-------|-------------------|----------|-------------|
 | **[Simple (L100)](./simple/)** | AI agent using managed Databricks services — Genie, Vector Search, Playground, managed agents. No custom code required. | ~3 hours | [Lab Guide](./simple/LAB_GUIDE.md) |
-| **[Medium (L200)](./medium/)** | Custom agent with OpenAI Agents SDK, MCP tools, Lakebase memory, and full-stack chat UI deployed as a Databricks App. | ~4 hours | [Setup Guide](./medium/lab_instructions/SETUP_GUIDE_WORKSPACE_ONLY.md) |
-| **[Advanced (L300)](./advanced/)** | Production-grade LangGraph agent with MCP, persistent memory, streaming UI, and comprehensive evaluation suite. | 2 days | [Workshop Instructions](./advanced/WORKSHOP_INSTRUCTIONS.md) |
+| **[Medium (L200)](./medium/)** | Custom agent with OpenAI Agents SDK, MCP tools, Lakebase memory, and full-stack chat UI deployed as a Databricks App. | ~4 hours | [Workspace Guide](./medium/lab_instructions/SETUP_GUIDE_WORKSPACE_ONLY.md) |
+| **[Advanced (L300)](./advanced/)** | Production-grade LangGraph agent with MCP, persistent memory, streaming UI, and comprehensive evaluation suite. | 2 days | [Local Guide](./advanced/WORKSHOP_INSTRUCTIONS.md) / [Workspace Guide](./advanced/WORKSHOP_INSTRUCTIONS_WORKSPACE.md) |
 
-Each level is self-contained — clone and go.
+---
+
+## Data Setup (Required First)
+
+**You must create your dataset before starting any workshop level.** All levels depend on structured data tables, chunked documents, a Vector Search index, and a Genie Space being provisioned first.
+
+| Method | Best for | Instructions |
+|--------|----------|--------------|
+| **Workspace notebook** | Workshop attendees, workspace-only users | Run `data/workspace_setup_script/01_quickstart_setup.py` as a notebook (select catalog + schema > Run All) |
+| **Local CLI scripts** | Local development, CI/CD automation | See [`data/README.md`](./data/README.md) |
+
+The setup creates: data tables, chunked policy documents, a Vector Search index, a Genie Space, and an MLflow experiment (~10-15 minutes).
+
+> **Note:** The Simple (L100) and Medium (L200) workspace guides include data setup as their first step. For Advanced (L300) local development, run the scripts in `data/local_cli_setup_script/` separately.
 
 ---
 
@@ -45,7 +58,7 @@ Then open the **Get Started** link for your chosen level above.
 simple/          L100 — Managed services, no custom code
 medium/          L200 — Custom agent with memory (OpenAI Agents SDK + Lakebase)
 advanced/        L300 — Full custom stack (LangGraph + MCP + React UI)
-data/            Shared setup scripts and synthetic FreshMart data
+data/            Shared setup scripts and synthetic data generation
 ```
 
 See [`data/README.md`](./data/README.md) for details on the data setup that powers all levels.
