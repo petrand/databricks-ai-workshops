@@ -33,6 +33,13 @@ You also need:
 - A **running SQL warehouse** (Compute > SQL Warehouses in Databricks)
 - **Unity Catalog** access (permission to create tables)
 
+### Step 0: Clone the repository
+
+```bash
+git clone https://github.com/AnanyaDBJ/databricks-ai-workshops.git
+cd databricks-ai-workshops
+```
+
 ### Step 1: Authenticate
 
 ```bash
@@ -143,7 +150,13 @@ Run everything inside Databricks — no local tools needed.
 
 - A Databricks workspace with **Unity Catalog**, **Vector Search**, and **Foundation Model API** enabled
 - A **running SQL warehouse** (Compute > SQL Warehouses)
-- The repository imported as a Git Folder (Workspace > Repos > Add > Git Folder)
+
+### Step 0: Import the repository into your workspace
+
+1. In the left sidebar, click **Workspace** > **Repos** (or "Git Folders")
+2. Click **Add** > **Git Folder**
+3. Paste the URL: `https://github.com/AnanyaDBJ/databricks-ai-workshops.git`
+4. Click **Create Git Folder**
 
 ### Step 1: Open the notebook
 
