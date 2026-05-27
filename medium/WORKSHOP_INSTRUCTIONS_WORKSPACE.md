@@ -64,12 +64,13 @@ Lakebase is a managed PostgreSQL database inside Databricks. Your app uses it fo
 ### Find your connection details
 
 1. Open the notebook `medium/scripts/lakebase_setup_script.ipynb` in the workspace
-2. In **Cell 3**, replace `<project name>` with the project name you just created
-3. Run **Cell 3** — note the output:
+2. Run **Cell 1** (pip install) — installs required dependencies
+3. In **Cell 4**, replace `<project name>` with the project name you just created
+4. Run **Cell 4** — note the output:
    - **Branch path**: `projects/my-agent-workshop/branches/production`
-   - **Database path**: the full `name` value (e.g., `projects/my-agent-workshop/branches/production/databases/abc123def456`)
+   - **Database path**: the full `name` value (e.g., `projects/my-agent-workshop/branches/production/databases/databricks-postgres`)
 
-> **Important:** Only run Cell 1 (optional) and Cell 3. Do NOT run Cells 2, 4, or 5 — the app creates its own database tables automatically.
+> **Important:** Only run Cell 1 (pip install), Cell 2 (optional — lists branches), and Cell 4 (lists databases). Do NOT run Cells 3, 5, or 6 — the app creates its own database tables automatically.
 
 ---
 
@@ -128,7 +129,7 @@ Find-and-replace these values:
 | `"my-agent-app"` | A unique name (e.g., `"agent-workshop-jsmith"`) | Choose your own |
 | `"<your-experiment-id>"` | Your Experiment ID (e.g., `"1234567890123456"`) | Step 4 |
 | `"projects/<your-project>/branches/<branch-name>"` | Your branch path | Step 3 |
-| `"projects/<your-project>/branches/<branch-name>/databases/<your-database-id>"` | Your database path | Step 3 |
+| `"projects/<your-project>/branches/production/databases/databricks-postgres"` | Your database path | Step 3 |
 | `https://<your-workspace>.cloud.databricks.com` | Your workspace URL | Browser address bar |
 
 **Here's what the key sections should look like after edits:**
@@ -147,7 +148,7 @@ resources:
         - name: 'postgres'
           postgres:
             branch: "projects/my-agent-workshop/branches/production"         # ← from Step 3
-            database: "projects/my-agent-workshop/branches/production/databases/abc123"  # ← from Step 3
+            database: "projects/my-agent-workshop/branches/production/databases/databricks-postgres"  # ← from Step 3
             permission: 'CAN_CONNECT_AND_CREATE'
 
 targets:
@@ -196,7 +197,13 @@ Open the **Web Terminal**: click the `>_` terminal icon in the bottom panel, or 
    databricks bundle deploy
    ```
 
-4. Start the app:
+4. Remove terraform binaries (required for workspace deployment):
+   ```bash
+   rm -rf .databricks/bundle/dev/bin .databricks/bundle/dev/terraform/.terraform
+   ```
+   > **Why?** The deploy step downloads large terraform binaries (~50MB+) into `.databricks/` — the same directory used as app source code. The app source snapshot has a 50MB file size limit and will fail if these are not removed.
+
+5. Start the app:
    ```bash
    databricks bundle run agent_openai_agents_sdk
    ```
@@ -243,8 +250,9 @@ If the agent responds with relevant answers, you're done!
 | `relation "ai_chatbot"."Chat" already exists` | Database tables created manually before deploy | Drop schemas: `DROP SCHEMA IF EXISTS ai_chatbot CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE;` then restart app |
 | `permission denied for schema` | App can't access tables you created | Drop schemas and let the app recreate them (it will own them) |
 | App shows **Crashed** | Usually a typo in `databricks.yml` | Click app > Logs tab > scroll to the error |
-| `Lakebase unavailable` | Wrong database path in config | Verify `branch:` and `database:` in `databricks.yml` match Cell 3 output |
+| `Lakebase unavailable` | Wrong database path in config | Verify `branch:` and `database:` in `databricks.yml` match Cell 4 output |
 | Agent doesn't use tools | Wrong URL in `agent.py` | Verify catalog/schema/index matches Step 2. Dots become slashes in URLs |
+| `Failed to snapshot source code... larger than maximum allowed file size` | Terraform binaries not removed | Run `rm -rf .databricks/bundle/dev/bin .databricks/bundle/dev/terraform/.terraform` then re-run `databricks bundle run` |
 | `An app with the same name already exists` | Name collision | Choose a different name or delete: `databricks apps delete <name>` |
 | `databricks bundle validate` shows errors | Unreplaced placeholder in YAML | Read the error — it points to the exact line |
 | Vector Search returns no results | Index hasn't finished syncing | Wait 5-10 minutes after Step 2 |
