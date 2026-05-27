@@ -9,17 +9,21 @@ data/
 ├── 00-utils.ipynb              # optional: MLflow artifacts on UC Volume (restricted networks)
 ├── 01_quickstart_setup.py      # main workshop setup notebook
 ├── lib/
-│   ├── generate.py
+│   ├── generate.py             # dispatches to verticals/registry.py
 │   ├── chunking.py             # writes policy_docs_chunked (UC table name unchanged)
 │   └── demo_names.py
 ├── verticals/
+│   ├── registry.py             # lists onboarded industries
 │   ├── retail/
+│   │   ├── workshop.py         # brand, Genie/VS names, optional UC function
 │   │   ├── tables.py
 │   │   └── docs/               # source markdown for Vector Search
 │   ├── education/
+│   │   ├── workshop.py
 │   │   ├── tables.py
 │   │   └── docs/
 │   └── financial_services/
+│       ├── workshop.py
 │       ├── tables.py
 │       └── docs/
 └── scripts/
@@ -44,6 +48,27 @@ python local_cli_setup_script/execute_chunking.py --profile PROFILE --warehouse-
 
 `execute_chunking.py` chunks **retail** docs only.
 
-## Note on financial_services
+## Financial services and Marketplace market data
+
+For `financial_services`, instrument prices are sourced from the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) Delta Share. Use a **one catalog, two schemas** layout:
+
+| Layer | Location | Writable? |
+|-------|----------|-----------|
+| Share (source) | `{catalog}.market_data.dailyprice`, `{catalog}.market_data.company_profile` | No (read-only) |
+| Workshop (landing) | `{catalog}.{schema}.clients`, `instruments`, `trades`, … | Yes |
+
+1. Install the Marketplace listing and name the catalog **the same** as the **Catalog** widget in `01_quickstart_setup.py`.
+2. Set **Schema** to a separate workshop schema (e.g. `meridian_demo`). Do not use `market_data` for generated tables.
+
+Other verticals (`education`, `retail`) use fully synthetic data in `{catalog}.{schema}` only.
 
 Agents and lab guides written for education/retail still expect the 6-table names. Use `financial_services` when you want financial-native tables and update Genie/agent prompts accordingly.
+
+## Onboarding a new industry
+
+1. Add `verticals/<industry>/` with `tables.py`, `docs/`, and `workshop.py` (see an existing vertical).
+2. Register it in `verticals/registry.py` (`_REGISTRY` and import).
+3. Add the industry id to the **Industry** widget in `01_quickstart_setup.py`.
+4. If the vertical needs external data (like financial services Marketplace share), document setup in `workshop.py` and extend `01_quickstart_setup.py` only for vertical-specific prerequisites.
+
+UC functions live in each vertical’s `workshop.py` (`udf_sql` / `udf_name`), not in `lib/generate.py`.

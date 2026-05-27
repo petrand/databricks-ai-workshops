@@ -6,16 +6,17 @@ from datetime import datetime, timedelta
 
 from lib.demo_names import CITIES_STATES, FIRST_NAMES, LAST_NAMES
 
+# Databricks Marketplace: Sample Market Data - Daily Price Data (Delta Sharing)
+# https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b
+# Install the listing using the same catalog name as the workshop setup notebook widget.
+# Share tables are read-only at {catalog}.market_data.*; workshop tables land at {catalog}.{schema}.*
+MARKET_DATA_SCHEMA = "market_data"
+DAILY_PRICE_TABLE = "dailyprice"
+COMPANY_PROFILE_TABLE = "company_profile"
+
 TABLES = [
     "clients", "instruments", "branches", "accounts",
     "trades", "trade_legs", "settlements",
-]
-
-SYMBOLS = [
-    ("AAPL", "Equity", 185.0), ("MSFT", "Equity", 420.0), ("GOOGL", "Equity", 175.0),
-    ("JPM", "Equity", 195.0), ("BAC", "Equity", 38.0), ("NVDA", "Equity", 880.0),
-    ("SPY", "ETF", 520.0), ("QQQ", "ETF", 445.0), ("TLT", "Bond ETF", 92.0),
-    ("GLD", "Commodity ETF", 215.0), ("VZ", "Equity", 40.0), ("XOM", "Equity", 115.0),
 ]
 
 BRANCH_NAMES = [
@@ -39,7 +40,82 @@ def _save(spark, full_schema, table, rows):
     print(f"Created {full_schema}.{table} — {len(rows)} rows")
 
 
-def generate(spark, full_schema: str, seed: int = 42) -> list[str]:
+def _market_data_fqn(catalog: str, table: str) -> str:
+    return f"`{catalog}`.`{MARKET_DATA_SCHEMA}`.`{table}`"
+
+
+def _load_instruments_from_delta_share(spark, full_schema: str, market_data_catalog: str) -> list[dict]:
+    """Materialize instruments from the installed Marketplace Delta Share tables."""
+    daily = _market_data_fqn(market_data_catalog, DAILY_PRICE_TABLE)
+    profile = _market_data_fqn(market_data_catalog, COMPANY_PROFILE_TABLE)
+    target = f"{full_schema}.instruments"
+
+    spark.sql(
+        f"""
+        CREATE OR REPLACE TABLE {target} AS
+        WITH latest_prices AS (
+          SELECT
+            ticker AS symbol,
+            CAST(close AS DOUBLE) AS last_price,
+            ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
+          FROM {daily}
+          WHERE ticker IS NOT NULL
+        ),
+        latest_per_symbol AS (
+          SELECT symbol, last_price
+          FROM latest_prices
+          WHERE rn = 1
+        ),
+        company AS (
+          SELECT
+            ticker,
+            industry,
+            exchange,
+            currency,
+            ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY companyName) AS prn
+          FROM {profile}
+          WHERE ticker IS NOT NULL
+            AND ticker NOT IN ('NaN', 'nan', '')
+        )
+        SELECT
+          format_string('INS-%03d', ROW_NUMBER() OVER (ORDER BY p.symbol)) AS instrument_id,
+          p.symbol,
+          CASE
+            WHEN c.industry ILIKE '%ETF%' OR c.industry ILIKE '%exchange traded fund%' THEN 'ETF'
+            WHEN c.industry ILIKE '%bond%' OR c.industry ILIKE '%fixed income%' THEN 'Fixed Income'
+            ELSE 'Equity'
+          END AS asset_class,
+          COALESCE(NULLIF(TRIM(c.exchange), ''), 'NYSE') AS exchange,
+          COALESCE(NULLIF(TRIM(c.currency), ''), 'USD') AS currency,
+          p.last_price
+        FROM latest_per_symbol p
+        LEFT JOIN company c ON p.symbol = c.ticker AND c.prn = 1
+        """
+    )
+
+    instruments_df = spark.table(target)
+    count = instruments_df.count()
+    print(
+        f"Created {target} — {count} rows "
+        f"(from Delta Share {market_data_catalog}.{MARKET_DATA_SCHEMA})"
+    )
+    return [row.asDict() for row in instruments_df.collect()]
+
+
+def _catalog_from_full_schema(full_schema: str) -> str:
+    parts = full_schema.split(".", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(f"full_schema must be catalog.schema, got '{full_schema}'")
+    return parts[0]
+
+
+def generate(
+    spark,
+    full_schema: str,
+    seed: int = 42,
+    market_data_catalog: str | None = None,
+) -> list[str]:
+    market_data_catalog = market_data_catalog or _catalog_from_full_schema(full_schema)
     random.seed(seed)
 
     clients = []
@@ -65,27 +141,12 @@ def generate(spark, full_schema: str, seed: int = 42) -> list[str]:
         })
     _save(spark, full_schema, "clients", clients)
 
-    instruments = []
-    for i, (sym, asset_class, base_price) in enumerate(SYMBOLS, 1):
-        instruments.append({
-            "instrument_id": f"INS-{i:03d}",
-            "symbol": sym,
-            "asset_class": asset_class,
-            "exchange": random.choice(["NYSE", "NASDAQ", "LSE", "SGX"]),
-            "currency": random.choice(["USD", "USD", "USD", "EUR", "GBP"]),
-            "last_price": round(base_price * random.uniform(0.95, 1.05), 4),
-        })
-    while len(instruments) < 300:
-        base = random.choice(SYMBOLS)
-        instruments.append({
-            "instrument_id": f"INS-{len(instruments) + 1:03d}",
-            "symbol": f"{base[0]}{random.randint(1, 9)}",
-            "asset_class": base[1],
-            "exchange": "NASDAQ",
-            "currency": "USD",
-            "last_price": round(base[2] * random.uniform(0.8, 1.2), 4),
-        })
-    _save(spark, full_schema, "instruments", instruments)
+    instruments = _load_instruments_from_delta_share(spark, full_schema, market_data_catalog)
+    if not instruments:
+        raise ValueError(
+            f"No instruments loaded from {market_data_catalog}.{MARKET_DATA_SCHEMA}. "
+            "Install the Marketplace listing into the same catalog as the setup notebook widget."
+        )
 
     branches = []
     for i, name in enumerate(BRANCH_NAMES, 1):
@@ -120,7 +181,7 @@ def generate(spark, full_schema: str, seed: int = 42) -> list[str]:
     for trade_id in range(1, 2001):
         account, instrument = random.choice(accounts), random.choice(instruments)
         qty = random.randint(10, 5000)
-        price = instrument["last_price"]
+        price = float(instrument["last_price"])
         trade_value = round(qty * price, 2)
         trade_dt = datetime(2024, 1, 2, 9, 30) + timedelta(
             days=random.randint(0, 300), hours=random.randint(0, 6), minutes=random.randint(0, 59)

@@ -25,13 +25,21 @@
 # MAGIC | `education` | 6 tables (students, courses, campuses, …) | EduPath Academy |
 # MAGIC | `retail` | 6 tables (customers, products, stores, …) | FreshMart (`verticals/retail/docs/`) |
 # MAGIC | `financial_services` | 7 tables (clients, instruments, trades, …) | Meridian Capital Partners |
+# MAGIC
+# MAGIC ### Financial services: Marketplace + workshop catalog
+# MAGIC
+# MAGIC For `financial_services`, instrument prices come from the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) Delta Share (read-only). Workshop tables are written to a **writable** schema you choose.
+# MAGIC
+# MAGIC 1. Install the Marketplace listing and name the catalog **exactly the same** as the **Catalog** widget below.
+# MAGIC 2. Share tables appear at `{catalog}.market_data.dailyprice` and `{catalog}.market_data.company_profile` (schema `market_data` is fixed by the provider).
+# MAGIC 3. Generated workshop tables land at `{catalog}.{schema}.*` (e.g. `clients`, `instruments`, `trades`).
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Configuration
 # MAGIC
-# MAGIC Set your catalog and schema names using the widgets above. These will be used for all resources created in this notebook.
+# MAGIC Set your catalog and schema names using the widgets above. All workshop resources are created under `{catalog}.{schema}`.
 
 # COMMAND ----------
 
@@ -58,10 +66,15 @@ SCHEMA = dbutils.widgets.get("schema")
 
 if not CATALOG:
     raise ValueError("Please enter a catalog name in the widget at the top of the notebook.")
+if not SCHEMA:
+    raise ValueError("Please enter a schema name in the widget at the top of the notebook.")
 
 FULL_SCHEMA = f"{CATALOG}.{SCHEMA}"
 print(f"Industry: {INDUSTRY}")
-print(f"Using schema: {FULL_SCHEMA}")
+print(f"Workshop tables: {FULL_SCHEMA}")
+if INDUSTRY == "financial_services":
+    print(f"Market data source (Delta Share): {CATALOG}.market_data.dailyprice")
+    print("Ensure the Marketplace listing is installed into this catalog name.")
 
 # COMMAND ----------
 
