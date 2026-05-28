@@ -54,11 +54,8 @@ def generate_workshop_data(
     print(f"Generating {vertical.brand} data in {full_schema}...")
 
     gen_kwargs: dict = {"seed": seed}
-    if vertical.id == "financial_services":
-        # Same catalog/schema as 01_quickstart_setup.py widgets (CATALOG, SCHEMA, FULL_SCHEMA).
-        gen_kwargs["catalog"] = catalog
-        gen_kwargs["schema"] = schema
-        gen_kwargs["market_data_catalog"] = market_data_catalog or catalog
+    if vertical.generate_extra_kwargs:
+        gen_kwargs.update(vertical.generate_extra_kwargs(catalog, schema, market_data_catalog))
     tables = vertical.generate_tables(spark, full_schema, **gen_kwargs)
     _apply_table_descriptions(spark, full_schema, tables, vertical.table_descriptions)
 

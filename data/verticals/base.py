@@ -1,7 +1,7 @@
 """Shared types for industry vertical workshop setup."""
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 
 # Short codes for Vector Search endpoint names: {code}-vs-{schema}
@@ -35,6 +35,7 @@ class WorkshopVertical:
     genie_description: str
     mlflow_experiment_suffix: str
     generate_tables: Callable[..., list[str]]
+    generate_extra_kwargs: Callable[[str, str, str | None], dict[str, Any]] | None = None
     table_descriptions: dict[str, str] | None = None
     chunk_table_name: str = "policy_docs_chunked"
     doc_index_name: str = "policy_docs_index"

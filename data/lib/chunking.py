@@ -41,7 +41,7 @@ def chunk_text(text: str) -> list[str]:
     return chunks
 
 
-def chunk_policy_docs_to_table(
+def chunk_markdown_docs_to_table(
     spark,
     full_schema: str,
     docs_dir: str,
@@ -71,3 +71,13 @@ def chunk_policy_docs_to_table(
     df.write.mode("overwrite").saveAsTable(f"{full_schema}.{target_table}")
     print(f"\nCreated {full_schema}.{target_table} — {df.count()} chunks")
     return df.count()
+
+
+def chunk_policy_docs_to_table(
+    spark,
+    full_schema: str,
+    docs_dir: str,
+    target_table: str = "policy_docs_chunked",
+) -> int:
+    """Backward-compatible alias for the old API name."""
+    return chunk_markdown_docs_to_table(spark, full_schema, docs_dir, target_table=target_table)

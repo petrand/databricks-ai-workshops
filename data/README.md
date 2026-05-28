@@ -43,10 +43,9 @@ data/
 ```bash
 cd data
 python scripts/generate_structured_data.py --industry retail --catalog CATALOG --schema SCHEMA
-python local_cli_setup_script/execute_chunking.py --profile PROFILE --warehouse-id ID
 ```
 
-`execute_chunking.py` chunks **retail** docs only.
+`local_cli_setup_script/*` is a legacy path and remains retail-centric; prefer `scripts/generate_structured_data.py` and notebook flow for multi-industry runs.
 
 ## Financial services and Marketplace market data
 
@@ -62,7 +61,7 @@ The FSI optional UC function is `weekly_close_spread(ticker_symbol)`. It returns
 
 Structured tables now receive Unity Catalog table descriptions automatically during generation for all verticals.
 
-Chunking and embeddings use the same generic path across industries (`lib/chunking.py` → chunk table → Vector Search index). Naming is now dynamic by use case:
+Chunking and embeddings use the same generic path across industries. The flow is `lib/chunking.py` `chunk_markdown_docs_to_table` → chunk table → Vector Search index. Naming is dynamic by use case:
 - `education`, `retail`: `policy_docs_chunked` → `policy_docs_index`
 - `financial_services`: `market_news_chunked` → `market_news_index`
 
@@ -72,7 +71,6 @@ Vector Search endpoint names use an industry code pattern: `{industry_code}-vs-{
 
 1. Add `verticals/<industry>/` with `tables.py`, `docs/`, and `workshop.py` (see an existing vertical).
 2. Register it in `verticals/registry.py` (`_REGISTRY` and import).
-3. Add the industry id to the **Industry** widget in `01_quickstart_setup.py`.
-4. If the vertical needs external data (like financial services Marketplace share), document setup in `workshop.py` and extend `01_quickstart_setup.py` only for vertical-specific prerequisites.
+3. If the vertical needs external data (like financial services Marketplace share), document setup in `workshop.py` and extend `01_quickstart_setup.py` only for vertical-specific prerequisites.
 
 UC functions live in each vertical’s `workshop.py` (`udf_sql` / `udf_name`), not in `lib/generate.py`.

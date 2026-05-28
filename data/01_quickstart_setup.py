@@ -44,11 +44,21 @@
 
 # COMMAND ----------
 
+import sys
+
+_notebook_path = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+_data_root = "/Workspace" + "/".join(_notebook_path.split("/")[:-1])
+if _data_root not in sys.path:
+    sys.path.insert(0, _data_root)
+
+from verticals.base import vs_endpoint_name
+from verticals.registry import INDUSTRIES
+
 if "industry" not in dbutils.widgets.getAll():
     dbutils.widgets.dropdown(
         "industry",
         "education",
-        ["retail", "education", "financial_services"],
+        list(INDUSTRIES),
         "Industry",
     )
 if "catalog" not in dbutils.widgets.getAll():
@@ -65,14 +75,9 @@ if not CATALOG:
 if not SCHEMA:
     raise ValueError("Please enter a schema name in the widget at the top of the notebook.")
 
-VS_ENDPOINT_SLUGS = {
-    "retail": "retail",
-    "education": "education",
-    "financial_services": "fsi",
-}
-if INDUSTRY not in VS_ENDPOINT_SLUGS:
-    raise ValueError(f"Unknown industry '{INDUSTRY}'. Expected one of: {', '.join(VS_ENDPOINT_SLUGS)}")
-PLANNED_VS_ENDPOINT_NAME = f"{VS_ENDPOINT_SLUGS[INDUSTRY]}-vs-{SCHEMA.strip().replace('_', '-')}"
+if INDUSTRY not in INDUSTRIES:
+    raise ValueError(f"Unknown industry '{INDUSTRY}'. Expected one of: {', '.join(INDUSTRIES)}")
+PLANNED_VS_ENDPOINT_NAME = vs_endpoint_name(INDUSTRY, SCHEMA)
 
 FULL_SCHEMA = f"{CATALOG}.{SCHEMA}"
 print(f"Industry: {INDUSTRY}")
@@ -108,14 +113,6 @@ print(f"Catalog '{CATALOG}' and schema '{FULL_SCHEMA}' are ready.")
 
 # COMMAND ----------
 
-import os
-import sys
-
-_notebook_path = dbutils.entry_point.getDbutils().notebook().getContext().notebookPath().get()
-_data_root = "/Workspace" + "/".join(_notebook_path.split("/")[:-1])
-if _data_root not in sys.path:
-    sys.path.insert(0, _data_root)
-
 from lib.generate import generate_workshop_data
 
 workshop = generate_workshop_data(
@@ -142,11 +139,11 @@ print(f"Vector Search index for this run: {FULL_SCHEMA}.{workshop.doc_index_name
 
 # COMMAND ----------
 
-from lib.chunking import chunk_policy_docs_to_table
+from lib.chunking import chunk_markdown_docs_to_table
 
 chunk_dir = workshop.docs_dir
 print(f"Source docs directory: {chunk_dir}")
-chunk_policy_docs_to_table(spark, FULL_SCHEMA, chunk_dir, target_table=workshop.chunk_table_name)
+chunk_markdown_docs_to_table(spark, FULL_SCHEMA, chunk_dir, target_table=workshop.chunk_table_name)
 
 # COMMAND ----------
 

@@ -34,23 +34,16 @@ RETURN (
 )"""
 
 
-def _generate_tables(
-    spark,
-    full_schema: str,
-    seed: int = 42,
-    catalog: str | None = None,
-    schema: str | None = None,
-    market_data_catalog: str | None = None,
-):
-    workshop_catalog, workshop_schema = (catalog, schema) if catalog and schema else full_schema.split(".", 1)
-    return tables.generate(
-        spark,
-        full_schema,
-        seed,
-        catalog=workshop_catalog,
-        schema=workshop_schema,
-        market_data_catalog=market_data_catalog or workshop_catalog,
-    )
+def _generate_extra_kwargs(
+    catalog: str,
+    schema: str,
+    market_data_catalog: str | None,
+) -> dict[str, str]:
+    return {
+        "catalog": catalog,
+        "schema": schema,
+        "market_data_catalog": market_data_catalog or catalog,
+    }
 
 
 VERTICAL = WorkshopVertical(
@@ -63,7 +56,8 @@ VERTICAL = WorkshopVertical(
         "market_news_index (Vector Search) for historically similar market-shock news."
     ),
     mlflow_experiment_suffix="meridian-agent-workshop",
-    generate_tables=_generate_tables,
+    generate_tables=tables.generate,
+    generate_extra_kwargs=_generate_extra_kwargs,
     table_descriptions=tables.TABLE_DESCRIPTIONS,
     chunk_table_name="market_news_chunked",
     doc_index_name="market_news_index",
