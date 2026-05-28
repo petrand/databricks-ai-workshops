@@ -24,15 +24,15 @@
 # MAGIC |----------|--------|-------------|
 # MAGIC | `education` | 6 tables (students, courses, campuses, …) | EduPath Academy |
 # MAGIC | `retail` | 6 tables (customers, products, stores, …) | FreshMart (`verticals/retail/docs/`) |
-# MAGIC | `financial_services` | 7 tables (clients, instruments, trades, …) | Meridian Capital Partners |
+# MAGIC | `financial_services` | 5 tables in `{catalog}.{schema}` (3 generated + 2 market-data views) | Meridian Capital Partners |
 # MAGIC
 # MAGIC ### Financial services: Marketplace + workshop catalog
 # MAGIC
-# MAGIC For `financial_services`, instrument prices come from the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) Delta Share (read-only). Workshop tables are written to a **writable** schema you choose.
+# MAGIC For `financial_services`, **1st party** data (clients, accounts, portfolio holdings) is generated in your workshop schema. **3rd party** market data comes from the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) Delta Share (read-only; not copied).
 # MAGIC
 # MAGIC 1. Install the Marketplace listing and name the catalog **exactly the same** as the **Catalog** widget below.
-# MAGIC 2. Share tables appear at `{catalog}.market_data.dailyprice` and `{catalog}.market_data.company_profile` (schema `market_data` is fixed by the provider).
-# MAGIC 3. Generated workshop tables land at `{catalog}.{schema}.*` (e.g. `clients`, `instruments`, `trades`).
+# MAGIC 2. Share tables: `{catalog}.market_data.dailyprice`, `{catalog}.market_data.company_profile`.
+# MAGIC 3. Workshop schema `{catalog}.{schema}`: generated `clients`, `accounts`, `portfolio_holdings` plus views `dailyprice`, `company_profile` → `{catalog}.market_data.*`.
 
 # COMMAND ----------
 
@@ -112,6 +112,7 @@ workshop = generate_workshop_data(
     schema=SCHEMA,
     spark=spark,
     seed=42,
+    market_data_catalog=CATALOG if INDUSTRY == "financial_services" else None,
 )
 
 tables = workshop.tables

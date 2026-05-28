@@ -33,7 +33,10 @@ def generate_workshop_data(
 
     gen_kwargs: dict = {"seed": seed}
     if vertical.id == "financial_services":
-        gen_kwargs["market_data_catalog"] = market_data_catalog
+        # Same catalog/schema as 01_quickstart_setup.py widgets (CATALOG, SCHEMA, FULL_SCHEMA).
+        gen_kwargs["catalog"] = catalog
+        gen_kwargs["schema"] = schema
+        gen_kwargs["market_data_catalog"] = market_data_catalog or catalog
     tables = vertical.generate_tables(spark, full_schema, **gen_kwargs)
 
     udf_sql = vertical.udf_sql(full_schema) if vertical.udf_sql else None

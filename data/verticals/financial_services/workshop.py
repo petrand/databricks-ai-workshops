@@ -24,10 +24,22 @@ return f(current_aum, monthly_growth_pct)
 $$"""
 
 
-def _generate_tables(spark, full_schema: str, seed: int = 42, market_data_catalog: str | None = None):
-    catalog = market_data_catalog or full_schema.split(".", 1)[0]
+def _generate_tables(
+    spark,
+    full_schema: str,
+    seed: int = 42,
+    catalog: str | None = None,
+    schema: str | None = None,
+    market_data_catalog: str | None = None,
+):
+    workshop_catalog, workshop_schema = (catalog, schema) if catalog and schema else full_schema.split(".", 1)
     return tables.generate(
-        spark, full_schema, seed, market_data_catalog=catalog
+        spark,
+        full_schema,
+        seed,
+        catalog=workshop_catalog,
+        schema=workshop_schema,
+        market_data_catalog=market_data_catalog or workshop_catalog,
     )
 
 
@@ -36,8 +48,8 @@ VERTICAL = WorkshopVertical(
     brand="Meridian Capital Partners",
     genie_title=_genie_title,
     genie_description=(
-        "Explore Meridian Capital Partners wealth-management and trading activity—client relationships, "
-        "portfolio exposure, branch performance, and settlement flows—in plain English."
+        "Explore Meridian Capital Partners clients, accounts, portfolio holdings, "
+        "and market prices (dailyprice, company_profile views in this schema)."
     ),
     vs_endpoint_prefix=_vs_prefix,
     mlflow_experiment_suffix="meridian-agent-workshop",

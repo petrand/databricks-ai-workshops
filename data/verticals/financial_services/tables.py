@@ -1,4 +1,10 @@
-"""Meridian Capital Partners — financial services tables for workshop demo."""
+"""Meridian Capital Partners — financial services tables for workshop demo.
+
+Paths match 01_quickstart_setup.py widgets (Catalog + Schema):
+  - 1st party (writable): {catalog}.{schema}.clients, accounts, portfolio_holdings
+  - 3rd party (read-only source): {catalog}.market_data.dailyprice, company_profile
+  - 3rd party (Genie/SQL in workshop schema): views at {catalog}.{schema}.dailyprice, company_profile
+"""
 
 import json
 import random
@@ -8,22 +14,14 @@ from lib.demo_names import CITIES_STATES, FIRST_NAMES, LAST_NAMES
 
 # Databricks Marketplace: Sample Market Data - Daily Price Data (Delta Sharing)
 # https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b
-# Install the listing using the same catalog name as the workshop setup notebook widget.
-# Share tables are read-only at {catalog}.market_data.*; workshop tables land at {catalog}.{schema}.*
+# Install the listing into the same catalog as the setup notebook Catalog widget.
 MARKET_DATA_SCHEMA = "market_data"
 DAILY_PRICE_TABLE = "dailyprice"
 COMPANY_PROFILE_TABLE = "company_profile"
 
-TABLES = [
-    "clients", "instruments", "branches", "accounts",
-    "trades", "trade_legs", "settlements",
-]
-
-BRANCH_NAMES = [
-    "Meridian New York", "Meridian London", "Meridian Singapore",
-    "Meridian Chicago", "Meridian San Francisco", "Meridian Zurich",
-    "Meridian Hong Kong", "Meridian Boston", "Meridian Toronto", "Meridian Dubai",
-]
+FIRST_PARTY_TABLES = ["clients", "accounts", "portfolio_holdings"]
+MARKET_DATA_VIEW_TABLES = [DAILY_PRICE_TABLE, COMPANY_PROFILE_TABLE]
+TABLES = FIRST_PARTY_TABLES + MARKET_DATA_VIEW_TABLES
 
 
 def _phone():
@@ -35,91 +33,100 @@ def _email(first, last):
     return f"{first.lower()}.{last.lower()}@{domain}"
 
 
-def _save(spark, full_schema, table, rows):
-    spark.createDataFrame(rows).write.mode("overwrite").saveAsTable(f"{full_schema}.{table}")
-    print(f"Created {full_schema}.{table} — {len(rows)} rows")
+def _save(spark, catalog: str, schema: str, table, rows):
+    fqn = f"{catalog}.{schema}.{table}"
+    spark.createDataFrame(rows).write.mode("overwrite").saveAsTable(fqn)
+    print(f"Created {fqn} — {len(rows)} rows")
 
 
 def _market_data_fqn(catalog: str, table: str) -> str:
     return f"`{catalog}`.`{MARKET_DATA_SCHEMA}`.`{table}`"
 
 
-def _load_instruments_from_delta_share(spark, full_schema: str, market_data_catalog: str) -> list[dict]:
-    """Materialize instruments from the installed Marketplace Delta Share tables."""
-    daily = _market_data_fqn(market_data_catalog, DAILY_PRICE_TABLE)
-    profile = _market_data_fqn(market_data_catalog, COMPANY_PROFILE_TABLE)
-    target = f"{full_schema}.instruments"
+def _resolve_locations(
+    full_schema: str,
+    catalog: str | None,
+    schema: str | None,
+    market_data_catalog: str | None,
+) -> tuple[str, str, str]:
+    """Align with notebook: CATALOG, SCHEMA, and market data at CATALOG.market_data."""
+    if catalog and schema:
+        workshop_catalog, workshop_schema = catalog, schema
+    else:
+        parts = full_schema.split(".", 1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise ValueError(f"full_schema must be catalog.schema, got '{full_schema}'")
+        workshop_catalog, workshop_schema = parts
 
-    spark.sql(
-        f"""
-        CREATE OR REPLACE TABLE {target} AS
-        WITH latest_prices AS (
-          SELECT
-            ticker AS symbol,
-            CAST(close AS DOUBLE) AS last_price,
-            ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY date DESC) AS rn
-          FROM {daily}
-          WHERE ticker IS NOT NULL
-        ),
-        latest_per_symbol AS (
-          SELECT symbol, last_price
-          FROM latest_prices
-          WHERE rn = 1
-        ),
-        company AS (
-          SELECT
-            ticker,
-            industry,
-            exchange,
-            currency,
-            ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY companyName) AS prn
-          FROM {profile}
-          WHERE ticker IS NOT NULL
-            AND ticker NOT IN ('NaN', 'nan', '')
+    share_catalog = market_data_catalog or workshop_catalog
+    return workshop_catalog, workshop_schema, share_catalog
+
+
+def _verify_market_data(spark, share_catalog: str) -> None:
+    daily = _market_data_fqn(share_catalog, DAILY_PRICE_TABLE)
+    count = spark.sql(f"SELECT COUNT(*) AS n FROM {daily}").collect()[0]["n"]
+    if count == 0:
+        raise ValueError(
+            f"No rows in {share_catalog}.{MARKET_DATA_SCHEMA}.{DAILY_PRICE_TABLE}. "
+            "Install the Marketplace listing into the Catalog widget name."
         )
-        SELECT
-          format_string('INS-%03d', ROW_NUMBER() OVER (ORDER BY p.symbol)) AS instrument_id,
-          p.symbol,
-          CASE
-            WHEN c.industry ILIKE '%ETF%' OR c.industry ILIKE '%exchange traded fund%' THEN 'ETF'
-            WHEN c.industry ILIKE '%bond%' OR c.industry ILIKE '%fixed income%' THEN 'Fixed Income'
-            ELSE 'Equity'
-          END AS asset_class,
-          COALESCE(NULLIF(TRIM(c.exchange), ''), 'NYSE') AS exchange,
-          COALESCE(NULLIF(TRIM(c.currency), ''), 'USD') AS currency,
-          p.last_price
-        FROM latest_per_symbol p
-        LEFT JOIN company c ON p.symbol = c.ticker AND c.prn = 1
-        """
-    )
-
-    instruments_df = spark.table(target)
-    count = instruments_df.count()
     print(
-        f"Created {target} — {count} rows "
-        f"(from Delta Share {market_data_catalog}.{MARKET_DATA_SCHEMA})"
+        f"Market data source: {share_catalog}.{MARKET_DATA_SCHEMA} "
+        f"({count:,} daily price rows — not copied, exposed via views in workshop schema)"
     )
-    return [row.asDict() for row in instruments_df.collect()]
 
 
-def _catalog_from_full_schema(full_schema: str) -> str:
-    parts = full_schema.split(".", 1)
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        raise ValueError(f"full_schema must be catalog.schema, got '{full_schema}'")
-    return parts[0]
+def _symbols_from_market_data(spark, share_catalog: str, limit: int = 400) -> list[str]:
+    daily = _market_data_fqn(share_catalog, DAILY_PRICE_TABLE)
+    rows = spark.sql(
+        f"""
+        SELECT ticker
+        FROM (
+          SELECT DISTINCT ticker
+          FROM {daily}
+          WHERE ticker IS NOT NULL AND ticker NOT IN ('NaN', 'nan', '')
+        )
+        ORDER BY ticker
+        LIMIT {int(limit)}
+        """
+    ).collect()
+    symbols = [r["ticker"] for r in rows]
+    if not symbols:
+        raise ValueError(
+            f"No tickers in {share_catalog}.{MARKET_DATA_SCHEMA}.{DAILY_PRICE_TABLE}. "
+            "Install the Marketplace listing into the Catalog widget name."
+        )
+    return symbols
+
+
+def _create_market_data_views(spark, workshop_catalog: str, workshop_schema: str, share_catalog: str) -> None:
+    """Views in {catalog}.{schema} pointing at {catalog}.market_data.* (no data copy)."""
+    for table in MARKET_DATA_VIEW_TABLES:
+        source = _market_data_fqn(share_catalog, table)
+        target = f"{workshop_catalog}.{workshop_schema}.{table}"
+        spark.sql(f"CREATE OR REPLACE VIEW {target} AS SELECT * FROM {source}")
+        print(f"Created view {target} -> {share_catalog}.{MARKET_DATA_SCHEMA}.{table}")
 
 
 def generate(
     spark,
     full_schema: str,
     seed: int = 42,
+    catalog: str | None = None,
+    schema: str | None = None,
     market_data_catalog: str | None = None,
 ) -> list[str]:
-    market_data_catalog = market_data_catalog or _catalog_from_full_schema(full_schema)
+    workshop_catalog, workshop_schema, share_catalog = _resolve_locations(
+        full_schema, catalog, schema, market_data_catalog
+    )
     random.seed(seed)
 
+    _verify_market_data(spark, share_catalog)
+    symbols = _symbols_from_market_data(spark, share_catalog)
+    as_of_date = datetime.utcnow().strftime("%Y-%m-%d")
+
     clients = []
-    for i in range(1, 201):
+    for i in range(1, 101):
         first, last = random.choice(FIRST_NAMES), random.choice(LAST_NAMES)
         city, state = random.choice(CITIES_STATES)
         clients.append({
@@ -135,97 +142,53 @@ def generate(
             "risk_rating": random.choices(["Low", "Medium", "High"], weights=[50, 35, 15])[0],
             "onboard_date": (datetime(2018, 1, 1) + timedelta(days=random.randint(0, 2200))).strftime("%Y-%m-%d"),
             "preferences": json.dumps({
-                "asset_classes": random.sample(["Equity", "Fixed Income", "ETF", "Options"], k=random.randint(1, 3)),
+                "asset_classes": random.sample(["Equity", "Fixed Income", "ETF"], k=random.randint(1, 2)),
                 "esg_screen": random.choice([True, False]),
             }),
         })
-    _save(spark, full_schema, "clients", clients)
-
-    instruments = _load_instruments_from_delta_share(spark, full_schema, market_data_catalog)
-    if not instruments:
-        raise ValueError(
-            f"No instruments loaded from {market_data_catalog}.{MARKET_DATA_SCHEMA}. "
-            "Install the Marketplace listing into the same catalog as the setup notebook widget."
-        )
-
-    branches = []
-    for i, name in enumerate(BRANCH_NAMES, 1):
-        city, state = CITIES_STATES[i % len(CITIES_STATES)]
-        branches.append({
-            "branch_id": f"BR-{i:02d}",
-            "name": name,
-            "city": city,
-            "region": state,
-            "desk_type": random.choice(["Wealth", "Institutional", "Trading", "Prime"]),
-            "phone": _phone(),
-        })
-    _save(spark, full_schema, "branches", branches)
+    _save(spark, workshop_catalog, workshop_schema, "clients", clients)
 
     accounts = []
-    for acc_id in range(1, 401):
-        client, branch = random.choice(clients), random.choice(branches)
+    for acc_id in range(1, 201):
+        client = random.choice(clients)
         accounts.append({
             "account_id": f"ACC-{acc_id:05d}",
             "client_id": client["client_id"],
-            "branch_id": branch["branch_id"],
-            "account_type": random.choice(["Brokerage", "Margin", "Retirement", "Institutional", "Trust"]),
-            "status": random.choices(["Active", "Restricted", "Closed"], weights=[88, 7, 5])[0],
-            "margin_enabled": random.choice([True, False]),
+            "account_type": random.choice(["Brokerage", "Retirement", "Trust", "Institutional"]),
+            "status": random.choices(["Active", "Restricted", "Closed"], weights=[90, 7, 3])[0],
             "open_date": (datetime(2019, 1, 1) + timedelta(days=random.randint(0, 1800))).strftime("%Y-%m-%d"),
-            "balance_usd": round(random.uniform(10_000, 5_000_000), 2),
+            "cash_balance_usd": round(random.uniform(5_000, 500_000), 2),
         })
-    _save(spark, full_schema, "accounts", accounts)
+    _save(spark, workshop_catalog, workshop_schema, "accounts", accounts)
 
-    trades, trade_legs = [], []
-    leg_id = 1
-    for trade_id in range(1, 2001):
-        account, instrument = random.choice(accounts), random.choice(instruments)
-        qty = random.randint(10, 5000)
-        price = float(instrument["last_price"])
-        trade_value = round(qty * price, 2)
-        trade_dt = datetime(2024, 1, 2, 9, 30) + timedelta(
-            days=random.randint(0, 300), hours=random.randint(0, 6), minutes=random.randint(0, 59)
-        )
-        trades.append({
-            "trade_id": f"TRD-{trade_id:06d}",
-            "account_id": account["account_id"],
-            "instrument_id": instrument["instrument_id"],
-            "symbol": instrument["symbol"],
-            "side": random.choice(["BUY", "SELL"]),
-            "order_type": random.choice(["Market", "Limit", "Stop", "Stop-Limit"]),
-            "quantity": float(qty),
-            "price": price,
-            "trade_value": trade_value,
-            "commission": round(max(0.99, trade_value * 0.001), 2),
-            "trade_timestamp": trade_dt.strftime("%Y-%m-%d %H:%M:%S"),
-            "status": random.choices(["Filled", "Partial", "Cancelled", "Rejected"], weights=[92, 3, 3, 2])[0],
-        })
-        for _ in range(random.randint(1, 3)):
-            trade_legs.append({
-                "leg_id": f"LEG-{leg_id:07d}",
-                "trade_id": f"TRD-{trade_id:06d}",
-                "allocation_pct": round(100 / 3, 2),
-                "quantity": float(max(1, qty // 3)),
-                "venue": random.choice(["NYSE", "NASDAQ", "BATS", "IEX"]),
-                "execution_price": round(price * random.uniform(0.999, 1.001), 4),
+    holdings = []
+    holding_id = 1
+    for account in accounts:
+        if account["status"] == "Closed":
+            continue
+        for _ in range(random.randint(3, 12)):
+            symbol = random.choice(symbols)
+            qty = round(random.uniform(10, 5000), 2)
+            cost_basis = round(random.uniform(15, 800), 4)
+            holdings.append({
+                "holding_id": f"HLD-{holding_id:06d}",
+                "account_id": account["account_id"],
+                "symbol": symbol,
+                "quantity": qty,
+                "cost_basis_usd": cost_basis,
+                "as_of_date": as_of_date,
             })
-            leg_id += 1
-    _save(spark, full_schema, "trades", trades)
-    _save(spark, full_schema, "trade_legs", trade_legs)
+            holding_id += 1
+    _save(spark, workshop_catalog, workshop_schema, "portfolio_holdings", holdings)
 
-    settlements = []
-    for sett_id in range(1, 401):
-        trade = random.choice(trades)
-        settlements.append({
-            "settlement_id": f"SET-{sett_id:05d}",
-            "trade_id": trade["trade_id"],
-            "account_id": trade["account_id"],
-            "settlement_type": random.choice(
-                ["Trade Settlement", "Dividend", "Fee", "Wire In", "Wire Out", "Interest"]
-            ),
-            "amount_usd": round(random.uniform(-500_000, 500_000), 2),
-            "settlement_date": (datetime(2024, 1, 1) + timedelta(days=random.randint(0, 300))).strftime("%Y-%m-%d"),
-            "status": random.choices(["Settled", "Pending", "Failed"], weights=[85, 12, 3])[0],
-        })
-    _save(spark, full_schema, "settlements", settlements)
+    _create_market_data_views(spark, workshop_catalog, workshop_schema, share_catalog)
+
+    ws = f"{workshop_catalog}.{workshop_schema}"
+    print(
+        f"Example join (all tables in workshop schema {ws}):\n"
+        f"  SELECT h.*, d.close, c.industry\n"
+        f"  FROM {ws}.portfolio_holdings h\n"
+        f"  JOIN {ws}.company_profile c ON h.symbol = c.ticker\n"
+        f"  JOIN {ws}.dailyprice d ON h.symbol = d.ticker"
+    )
     return TABLES

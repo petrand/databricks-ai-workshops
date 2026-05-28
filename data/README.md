@@ -36,7 +36,7 @@ data/
 |----------|-------|--------|------|
 | `education` (default) | EduPath Academy | 6 retail-shaped table names, school semantics | `verticals/education/docs/` |
 | `retail` | FreshMart | Same 6 tables, grocery semantics | `verticals/retail/docs/` |
-| `financial_services` | Meridian Capital Partners | `clients`, `instruments`, `branches`, `accounts`, `trades`, `trade_legs`, `settlements` | `verticals/financial_services/docs/` |
+| `financial_services` | Meridian Capital Partners | `{catalog}.{schema}`: clients, accounts, portfolio_holdings, dailyprice & company_profile (views) | `verticals/financial_services/docs/` |
 
 ## Local CLI (optional)
 
@@ -50,19 +50,18 @@ python local_cli_setup_script/execute_chunking.py --profile PROFILE --warehouse-
 
 ## Financial services and Marketplace market data
 
-For `financial_services`, instrument prices are sourced from the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) Delta Share. Use a **one catalog, two schemas** layout:
+For `financial_services`, use a **one catalog, two schemas** layout:
 
 | Layer | Location | Writable? |
 |-------|----------|-----------|
-| Share (source) | `{catalog}.market_data.dailyprice`, `{catalog}.market_data.company_profile` | No (read-only) |
-| Workshop (landing) | `{catalog}.{schema}.clients`, `instruments`, `trades`, … | Yes |
+| 3rd party (Delta Share source) | `{catalog}.market_data.dailyprice`, `{catalog}.market_data.company_profile` | No — provider share |
+| Workshop schema (Genie) | `{catalog}.{schema}.*` — tables + views to the share | 1st party written; 3rd party as views |
 
-1. Install the Marketplace listing and name the catalog **the same** as the **Catalog** widget in `01_quickstart_setup.py`.
-2. Set **Schema** to a separate workshop schema (e.g. `meridian_demo`). Do not use `market_data` for generated tables.
+Install the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) listing into the **Catalog** widget name. The generator creates `{catalog}.{schema}.dailyprice` and `company_profile` **views** over `{catalog}.market_data.*` so Genie and SQL use one schema; underlying share data is not copied.
 
 Other verticals (`education`, `retail`) use fully synthetic data in `{catalog}.{schema}` only.
 
-Agents and lab guides written for education/retail still expect the 6-table names. Use `financial_services` when you want financial-native tables and update Genie/agent prompts accordingly.
+Agents and lab guides written for education/retail still expect the 6-table names. Use `financial_services` when you want portfolio + market-data joins and update Genie/agent prompts accordingly.
 
 ## Onboarding a new industry
 
