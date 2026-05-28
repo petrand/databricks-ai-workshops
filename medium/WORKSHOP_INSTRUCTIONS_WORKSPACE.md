@@ -211,7 +211,44 @@ Open the **Web Terminal**: click the `>_` terminal icon in the bottom panel, or 
 
 ---
 
-## Step 7: Verify the Deployment
+## Step 7: Grant Permissions
+
+The app runs as a **service principal** (SP) that needs access to your data resources. Lakebase permissions are handled automatically by the bundle, but Unity Catalog and Genie Space require manual grants.
+
+### Get the service principal ID
+
+1. Go to **Compute** > **Apps** and click your app name
+2. Find the **Service Principal** listed on the app details page — copy its client ID
+
+Or from the Web Terminal:
+
+```bash
+SP_CLIENT_ID=$(databricks apps get <your-app-name> --output json | jq -r '.service_principal_client_id')
+echo "SP Client ID: $SP_CLIENT_ID"
+```
+
+### Grant Unity Catalog access
+
+Run in the **SQL Editor** (or a notebook attached to your SQL warehouse):
+
+```sql
+GRANT USE CATALOG ON CATALOG <your-catalog> TO `<SP_CLIENT_ID>`;
+GRANT USE SCHEMA ON SCHEMA <your-catalog>.<your-schema> TO `<SP_CLIENT_ID>`;
+GRANT SELECT ON SCHEMA <your-catalog>.<your-schema> TO `<SP_CLIENT_ID>`;
+```
+
+Replace `<your-catalog>.<your-schema>` with the values from Step 2, and `<SP_CLIENT_ID>` with the ID from above.
+
+### Grant Genie Space access
+
+1. In the left sidebar, go to your **Genie Space** (the one created in Step 2)
+2. Click **Share** (top-right)
+3. Search for the service principal (by client ID or name)
+4. Grant **Can Run** permission
+
+---
+
+## Step 8: Verify the Deployment
 
 ### Check app status
 
@@ -256,6 +293,7 @@ If the agent responds with relevant answers, you're done!
 | `An app with the same name already exists` | Name collision | Choose a different name or delete: `databricks apps delete <name>` |
 | `databricks bundle validate` shows errors | Unreplaced placeholder in YAML | Read the error — it points to the exact line |
 | Vector Search returns no results | Index hasn't finished syncing | Wait 5-10 minutes after Step 2 |
+| `PERMISSION_DENIED` or agent tools return empty | SP doesn't have UC or Genie access | Complete Step 7 (Grant Permissions) |
 
 ---
 
