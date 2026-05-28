@@ -122,9 +122,9 @@ print(f"\n{workshop.brand_name}: created tables {tables}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 3: Policy Documents and Chunked Table
+# MAGIC ## Step 3: Documents and Chunked Table
 # MAGIC
-# MAGIC Reads markdown from `verticals/<industry>/docs/`, then chunks into `policy_docs_chunked`.
+# MAGIC Reads markdown from `verticals/<industry>/docs/` (retail/education: policies; financial_services: market-shock news), then chunks into `policy_docs_chunked`.
 
 # COMMAND ----------
 

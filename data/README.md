@@ -36,7 +36,7 @@ data/
 |----------|-------|--------|------|
 | `education` (default) | EduPath Academy | 6 retail-shaped table names, school semantics | `verticals/education/docs/` |
 | `retail` | FreshMart | Same 6 tables, grocery semantics | `verticals/retail/docs/` |
-| `financial_services` | Meridian Capital Partners | `{catalog}.{schema}`: clients, accounts, portfolio_holdings, dailyprice, company_profile | `verticals/financial_services/docs/` |
+| `financial_services` | Meridian Capital Partners | `{catalog}.{schema}`: clients, accounts, portfolio_holdings, dailyprice, company_profile | 13 AAPL/TSLA market-shock news articles in `verticals/financial_services/docs/` |
 
 ## Local CLI (optional)
 
@@ -56,7 +56,9 @@ Install the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cl
 
 Other verticals (`education`, `retail`) use fully synthetic data in `{catalog}.{schema}` only.
 
-Agents and lab guides written for education/retail still expect the 6-table names. Use `financial_services` when you want portfolio + market-data joins and update Genie/agent prompts accordingly.
+Agents and lab guides written for education/retail still expect the 6-table names. For `financial_services`, combine **Vector Search** on `policy_docs_index` (historical shock narratives) with **Genie/SQL** on `dailyprice` (price context around shock dates). Re-run setup only when you add or remove markdown in `docs/` or need to refresh the index.
+
+Chunking and embeddings use the same generic path as retail/education (`lib/chunking.py` → `policy_docs_chunked` → `policy_docs_index`); no vertical-specific code changes are required for the news corpus.
 
 ## Onboarding a new industry
 
