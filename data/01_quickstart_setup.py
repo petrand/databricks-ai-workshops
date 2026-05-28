@@ -65,9 +65,19 @@ if not CATALOG:
 if not SCHEMA:
     raise ValueError("Please enter a schema name in the widget at the top of the notebook.")
 
+VS_ENDPOINT_SLUGS = {
+    "retail": "retail",
+    "education": "education",
+    "financial_services": "fsi",
+}
+if INDUSTRY not in VS_ENDPOINT_SLUGS:
+    raise ValueError(f"Unknown industry '{INDUSTRY}'. Expected one of: {', '.join(VS_ENDPOINT_SLUGS)}")
+PLANNED_VS_ENDPOINT_NAME = f"{VS_ENDPOINT_SLUGS[INDUSTRY]}-vs-{SCHEMA.strip().replace('_', '-')}"
+
 FULL_SCHEMA = f"{CATALOG}.{SCHEMA}"
 print(f"Industry: {INDUSTRY}")
 print(f"Workshop tables: {FULL_SCHEMA}")
+print(f"Planned Vector Search endpoint: {PLANNED_VS_ENDPOINT_NAME}")
 if INDUSTRY == "financial_services":
     if SCHEMA.lower() == "market_data":
         raise ValueError(
@@ -76,6 +86,7 @@ if INDUSTRY == "financial_services":
         )
     print(f"Market data install (read-only): {CATALOG}.market_data — snapshotted into {FULL_SCHEMA}")
     print("Ensure the Marketplace listing is installed into the Catalog widget name.")
+    print("Expected endpoint prefix for this run: fsi-vs-...")
 
 # COMMAND ----------
 
@@ -118,6 +129,7 @@ workshop = generate_workshop_data(
 
 tables = workshop.tables
 print(f"\n{workshop.brand_name}: created tables {tables}")
+print(f"Vector Search endpoint for this run: {workshop.vs_endpoint_name}")
 
 # COMMAND ----------
 
@@ -172,7 +184,7 @@ w = WorkspaceClient()
 WORKSPACE_HOST = workspace_host(w)
 WORKSPACE_ORG_ID = notebook_org_id(dbutils)
 
-VS_ENDPOINT_NAME = workshop.vs_endpoint_prefix
+VS_ENDPOINT_NAME = workshop.vs_endpoint_name
 VS_INDEX_NAME = f"{FULL_SCHEMA}.policy_docs_index"
 
 # --- Create endpoint (or reuse existing) ---

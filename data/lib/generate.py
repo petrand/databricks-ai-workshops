@@ -7,6 +7,7 @@ Called from data/01_quickstart_setup.py with the Industry widget value.
 import os
 from types import SimpleNamespace
 
+from verticals.base import vs_endpoint_name
 from verticals.registry import INDUSTRIES, get_vertical  # noqa: F401 — re-exported for CLI/scripts
 
 DATA_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,7 +52,7 @@ def generate_workshop_data(
         brand_name=vertical.brand,
         genie_title=vertical.genie_title(schema),
         genie_description=vertical.genie_description,
-        vs_endpoint_prefix=vertical.vs_endpoint_prefix(schema),
+        vs_endpoint_name=vs_endpoint_name(vertical.id, schema),
         mlflow_experiment_suffix=vertical.mlflow_experiment_suffix,
         optional_udf_sql=udf_sql,
         optional_udf_name=vertical.udf_name,

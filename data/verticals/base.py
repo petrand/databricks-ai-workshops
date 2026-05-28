@@ -4,6 +4,27 @@ from dataclasses import dataclass
 from typing import Callable
 
 
+# Short codes for Vector Search endpoint names: {code}-vs-{schema}
+VS_ENDPOINT_SLUGS: dict[str, str] = {
+    "retail": "retail",
+    "education": "education",
+    "financial_services": "fsi",
+}
+
+
+def vs_endpoint_name(vertical_id: str, schema: str) -> str:
+    key = vertical_id.strip().lower().replace(" ", "_")
+    try:
+        slug = VS_ENDPOINT_SLUGS[key]
+    except KeyError:
+        known = ", ".join(sorted(VS_ENDPOINT_SLUGS))
+        raise ValueError(
+            f"Unknown industry '{vertical_id}'. Add it to VS_ENDPOINT_SLUGS or use: {known}"
+        ) from None
+    schema_slug = schema.strip().replace("_", "-")
+    return f"{slug}-vs-{schema_slug}"
+
+
 @dataclass(frozen=True)
 class WorkshopVertical:
     """Metadata and generators for one workshop industry."""
@@ -12,7 +33,6 @@ class WorkshopVertical:
     brand: str
     genie_title: Callable[[str], str]
     genie_description: str
-    vs_endpoint_prefix: Callable[[str], str]
     mlflow_experiment_suffix: str
     generate_tables: Callable[..., list[str]]
     udf_name: str | None = None

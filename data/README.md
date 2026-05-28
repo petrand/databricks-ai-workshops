@@ -60,6 +60,8 @@ Agents and lab guides written for education/retail still expect the 6-table name
 
 Chunking and embeddings use the same generic path as retail/education (`lib/chunking.py` → `policy_docs_chunked` → `policy_docs_index`); no vertical-specific code changes are required for the news corpus.
 
+Vector Search endpoint names use an industry code pattern: `{industry_code}-vs-{schema}`. Current codes are `education`, `retail`, and `fsi` (for `financial_services`), so examples are `education-vs-my-schema`, `retail-vs-my-schema`, and `fsi-vs-my-schema`.
+
 ## Onboarding a new industry
 
 1. Add `verticals/<industry>/` with `tables.py`, `docs/`, and `workshop.py` (see an existing vertical).

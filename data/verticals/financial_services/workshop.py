@@ -8,10 +8,6 @@ def _genie_title(schema: str) -> str:
     return f"Meridian_Capital_Data_({schema})"
 
 
-def _vs_prefix(schema: str) -> str:
-    return f"meridian-vs-{schema.strip().replace('_', '-')}"
-
-
 def _udf_sql(full_schema: str) -> str:
     return f"""
 CREATE OR REPLACE FUNCTION {full_schema}.portfolio_forecast(current_aum DOUBLE, monthly_growth_pct DOUBLE)
@@ -52,7 +48,6 @@ VERTICAL = WorkshopVertical(
         "and company_profile. Use dailyprice for price moves around dates; pair with "
         "policy_docs_index (Vector Search) for historically similar market-shock news."
     ),
-    vs_endpoint_prefix=_vs_prefix,
     mlflow_experiment_suffix="meridian-agent-workshop",
     generate_tables=_generate_tables,
     udf_name="portfolio_forecast",
