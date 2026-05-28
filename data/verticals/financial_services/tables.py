@@ -20,6 +20,13 @@ COMPANY_PROFILE_TABLE = "company_profile"
 FIRST_PARTY_TABLES = ["clients", "accounts", "portfolio_holdings"]
 MARKET_DATA_TABLES = [DAILY_PRICE_TABLE, COMPANY_PROFILE_TABLE]
 TABLES = FIRST_PARTY_TABLES + MARKET_DATA_TABLES
+TABLE_DESCRIPTIONS = {
+    "clients": "Client master records with KYC tier, risk rating, and profile attributes.",
+    "accounts": "Investment account records tied to clients with type, status, and balances.",
+    "portfolio_holdings": "Position-level holdings by account including symbol, quantity, and cost basis.",
+    "dailyprice": "Daily market pricing snapshot for tradable symbols sourced from Marketplace share.",
+    "company_profile": "Reference company attributes and sector/industry metadata for tradable symbols.",
+}
 
 
 def _phone():

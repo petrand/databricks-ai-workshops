@@ -7,6 +7,14 @@ from datetime import datetime, timedelta
 from lib.demo_names import CITIES_STATES, FIRST_NAMES, LAST_NAMES, STREETS
 
 TABLES = ["customers", "products", "stores", "transactions", "transaction_items", "payment_history"]
+TABLE_DESCRIPTIONS = {
+    "customers": "Customer master records including profile, location, loyalty tier, and preferences.",
+    "products": "Product catalog with category, brand, pricing, stock, and merchandising attributes.",
+    "stores": "FreshMart store locations with contact details and operating hours.",
+    "transactions": "Point-of-sale transaction headers with customer, store, totals, and payment method.",
+    "transaction_items": "Line-item details for each transaction including product, quantity, price, and discount.",
+    "payment_history": "Customer payment instrument history and billing profile metadata.",
+}
 
 MEMBERSHIP_TIERS = ["Bronze", "Silver", "Gold", "Platinum"]
 

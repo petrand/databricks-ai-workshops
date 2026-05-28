@@ -10,7 +10,7 @@ data/
 ├── 01_quickstart_setup.py      # main workshop setup notebook
 ├── lib/
 │   ├── generate.py             # dispatches to verticals/registry.py
-│   ├── chunking.py             # writes policy_docs_chunked (UC table name unchanged)
+│   ├── chunking.py             # writes chunked docs table (name depends on industry)
 │   └── demo_names.py
 ├── verticals/
 │   ├── registry.py             # lists onboarded industries
@@ -56,9 +56,15 @@ Install the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cl
 
 Other verticals (`education`, `retail`) use fully synthetic data in `{catalog}.{schema}` only.
 
-Agents and lab guides written for education/retail still expect the 6-table names. For `financial_services`, combine **Vector Search** on `policy_docs_index` (historical shock narratives) with **Genie/SQL** on `dailyprice` (price context around shock dates). Re-run setup only when you add or remove markdown in `docs/` or need to refresh the index.
+Agents and lab guides written for education/retail still expect the 6-table names. For `financial_services`, combine **Vector Search** on `market_news_index` (historical shock narratives) with **Genie/SQL** on `dailyprice` (price context around shock dates). Re-run setup only when you add or remove markdown in `docs/` or need to refresh the index.
 
-Chunking and embeddings use the same generic path as retail/education (`lib/chunking.py` → `policy_docs_chunked` → `policy_docs_index`); no vertical-specific code changes are required for the news corpus.
+The FSI optional UC function is `weekly_close_spread(ticker_symbol)`. It returns weekly volatility as the standard deviation of day-over-day close returns (%) over the latest 7 trading days for that ticker.
+
+Structured tables now receive Unity Catalog table descriptions automatically during generation for all verticals.
+
+Chunking and embeddings use the same generic path across industries (`lib/chunking.py` → chunk table → Vector Search index). Naming is now dynamic by use case:
+- `education`, `retail`: `policy_docs_chunked` → `policy_docs_index`
+- `financial_services`: `market_news_chunked` → `market_news_index`
 
 Vector Search endpoint names use an industry code pattern: `{industry_code}-vs-{schema}`. Current codes are `education`, `retail`, and `fsi` (for `financial_services`), so examples are `education-vs-my-schema`, `retail-vs-my-schema`, and `fsi-vs-my-schema`.
 

@@ -6,6 +6,14 @@ from datetime import datetime, timedelta
 from lib.demo_names import CITIES_STATES, FIRST_NAMES, LAST_NAMES, STREETS
 
 TABLES = ["customers", "products", "stores", "transactions", "transaction_items", "payment_history"]
+TABLE_DESCRIPTIONS = {
+    "customers": "Student records including contact details, learner profile, tier, and preferences.",
+    "products": "Course catalog with department, instructor, tuition, and academic unit metadata.",
+    "stores": "Campus and learning-center locations with address and operating information.",
+    "transactions": "Enrollment and purchase transaction headers with learner, campus, totals, and payment method.",
+    "transaction_items": "Line-item detail linking each transaction to selected courses and pricing adjustments.",
+    "payment_history": "Student payment method history and billing profile metadata.",
+}
 
 MEMBERSHIP_TIERS = ["Freshman", "Sophomore", "Junior", "Senior"]
 LEARNING_STYLES = ["visual", "auditory", "reading", "kinesthetic", "hybrid", "self-paced", "collaborative", "none"]

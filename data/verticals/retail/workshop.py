@@ -18,4 +18,5 @@ VERTICAL = WorkshopVertical(
     ),
     mlflow_experiment_suffix="freshmart-agent-workshop",
     generate_tables=tables.generate,
+    table_descriptions=tables.TABLE_DESCRIPTIONS,
 )

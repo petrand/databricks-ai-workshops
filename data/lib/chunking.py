@@ -1,4 +1,4 @@
-"""Chunk policy markdown into policy_docs_chunked for Vector Search."""
+"""Chunk markdown into a Unity Catalog table for Vector Search."""
 
 import hashlib
 import os
@@ -41,12 +41,17 @@ def chunk_text(text: str) -> list[str]:
     return chunks
 
 
-def chunk_policy_docs_to_table(spark, full_schema: str, docs_dir: str) -> int:
+def chunk_policy_docs_to_table(
+    spark,
+    full_schema: str,
+    docs_dir: str,
+    target_table: str = "policy_docs_chunked",
+) -> int:
     if not os.path.isdir(docs_dir):
-        raise FileNotFoundError(f"Policy docs not found: {docs_dir}")
+        raise FileNotFoundError(f"Docs directory not found: {docs_dir}")
 
     all_chunks = []
-    print(f"Reading policy documents from: {docs_dir}\n")
+    print(f"Reading documents from: {docs_dir}\n")
     for filename in sorted(os.listdir(docs_dir)):
         if not filename.endswith(".md"):
             continue
@@ -63,6 +68,6 @@ def chunk_policy_docs_to_table(spark, full_schema: str, docs_dir: str) -> int:
         print(f"  {filename}: {len(chunks)} chunks")
 
     df = spark.createDataFrame(all_chunks)
-    df.write.mode("overwrite").saveAsTable(f"{full_schema}.policy_docs_chunked")
-    print(f"\nCreated {full_schema}.policy_docs_chunked — {df.count()} chunks")
+    df.write.mode("overwrite").saveAsTable(f"{full_schema}.{target_table}")
+    print(f"\nCreated {full_schema}.{target_table} — {df.count()} chunks")
     return df.count()

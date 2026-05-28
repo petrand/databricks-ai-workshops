@@ -19,6 +19,27 @@ def _docs_dir(industry: str) -> str:
     return os.path.join(DATA_ROOT, "verticals", industry, "docs")
 
 
+def _apply_table_descriptions(
+    spark,
+    full_schema: str,
+    tables: list[str],
+    descriptions: dict[str, str] | None,
+) -> None:
+    if not descriptions:
+        print("No table descriptions configured for this industry; skipping COMMENT ON TABLE.")
+        return
+
+    for table in tables:
+        description = descriptions.get(table)
+        if not description:
+            print(f"WARNING: No table description configured for {full_schema}.{table}; skipping.")
+            continue
+
+        escaped = description.replace("'", "''")
+        spark.sql(f"COMMENT ON TABLE {full_schema}.{table} IS '{escaped}'")
+        print(f"  Added table description: {full_schema}.{table}")
+
+
 def generate_workshop_data(
     industry: str,
     catalog: str,
@@ -39,6 +60,7 @@ def generate_workshop_data(
         gen_kwargs["schema"] = schema
         gen_kwargs["market_data_catalog"] = market_data_catalog or catalog
     tables = vertical.generate_tables(spark, full_schema, **gen_kwargs)
+    _apply_table_descriptions(spark, full_schema, tables, vertical.table_descriptions)
 
     udf_sql = vertical.udf_sql(full_schema) if vertical.udf_sql else None
 
@@ -53,6 +75,8 @@ def generate_workshop_data(
         genie_title=vertical.genie_title(schema),
         genie_description=vertical.genie_description,
         vs_endpoint_name=vs_endpoint_name(vertical.id, schema),
+        chunk_table_name=vertical.chunk_table_name,
+        doc_index_name=vertical.doc_index_name,
         mlflow_experiment_suffix=vertical.mlflow_experiment_suffix,
         optional_udf_sql=udf_sql,
         optional_udf_name=vertical.udf_name,

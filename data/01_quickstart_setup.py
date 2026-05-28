@@ -130,21 +130,23 @@ workshop = generate_workshop_data(
 tables = workshop.tables
 print(f"\n{workshop.brand_name}: created tables {tables}")
 print(f"Vector Search endpoint for this run: {workshop.vs_endpoint_name}")
+print(f"Chunk table for this run: {FULL_SCHEMA}.{workshop.chunk_table_name}")
+print(f"Vector Search index for this run: {FULL_SCHEMA}.{workshop.doc_index_name}")
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC ## Step 3: Documents and Chunked Table
 # MAGIC
-# MAGIC Reads markdown from `verticals/<industry>/docs/` (retail/education: policies; financial_services: market-shock news), then chunks into `policy_docs_chunked`.
+# MAGIC Reads markdown from `verticals/<industry>/docs/` (retail/education: policies; financial_services: market-shock news), then chunks into an industry-appropriate table name.
 
 # COMMAND ----------
 
 from lib.chunking import chunk_policy_docs_to_table
 
 chunk_dir = workshop.docs_dir
-print(f"Policy documents directory: {chunk_dir}")
-chunk_policy_docs_to_table(spark, FULL_SCHEMA, chunk_dir)
+print(f"Source docs directory: {chunk_dir}")
+chunk_policy_docs_to_table(spark, FULL_SCHEMA, chunk_dir, target_table=workshop.chunk_table_name)
 
 # COMMAND ----------
 
@@ -185,7 +187,7 @@ WORKSPACE_HOST = workspace_host(w)
 WORKSPACE_ORG_ID = notebook_org_id(dbutils)
 
 VS_ENDPOINT_NAME = workshop.vs_endpoint_name
-VS_INDEX_NAME = f"{FULL_SCHEMA}.policy_docs_index"
+VS_INDEX_NAME = f"{FULL_SCHEMA}.{workshop.doc_index_name}"
 
 # --- Create endpoint (or reuse existing) ---
 try:
@@ -224,7 +226,7 @@ print(f"Endpoint '{VS_ENDPOINT_NAME}' is ready.")
 # COMMAND ----------
 
 spark.sql(f"""
-ALTER TABLE {FULL_SCHEMA}.policy_docs_chunked
+ALTER TABLE {FULL_SCHEMA}.{workshop.chunk_table_name}
   SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
 """)
 
@@ -248,7 +250,7 @@ except Exception as e:
 # Create a new index
 index = client.create_delta_sync_index(
     endpoint_name=VS_ENDPOINT_NAME,
-    source_table_name=f"{FULL_SCHEMA}.policy_docs_chunked",
+    source_table_name=f"{FULL_SCHEMA}.{workshop.chunk_table_name}",
     index_name=VS_INDEX_NAME,
     pipeline_type="TRIGGERED",
     primary_key="chunk_id",
@@ -395,8 +397,8 @@ print("  Data Tables:")
 for table in tables:
     count = spark.sql(f"SELECT COUNT(*) as cnt FROM {FULL_SCHEMA}.{table}").collect()[0]["cnt"]
     print(f"    {table:25s} {count:>8,} rows")
-chunks_count = spark.sql(f"SELECT COUNT(*) as cnt FROM {FULL_SCHEMA}.policy_docs_chunked").collect()[0]["cnt"]
-print(f"    {'policy_docs_chunked':25s} {chunks_count:>8,} chunks")
+chunks_count = spark.sql(f"SELECT COUNT(*) as cnt FROM {FULL_SCHEMA}.{workshop.chunk_table_name}").collect()[0]["cnt"]
+print(f"    {workshop.chunk_table_name:25s} {chunks_count:>8,} chunks")
 print()
 print(f"  Vector Search Endpoint:  {VS_ENDPOINT_NAME}")
 print(f"  Vector Search Index:     {VS_INDEX_NAME}")

@@ -19,8 +19,6 @@ Judge Yvonne Gonzalez Rogers handed down the decision in the closely watched tri
 
 The injunction addresses a longstanding developer complaint and raises the possibility that developers could direct their users to their website to subscribe to or purchase digital content, hurting Apple's App Store sales, which grossed an estimated $64 billion in 2020.
 
-Apple stock dropped more than 3% in trading Friday.
-
 The decision concludes the first part of the battle between the two companies over Apple's App Store policies and whether they stifle competition. Apple won on nine of 10 counts but was found to engage in anticompetitive conduct under California law, and will be forced to change its App Store policies and loosen its grip over in-app purchases. The injunction will come into effect in December.
 
 > "The Court concludes that Apple's anti-steering provisions hide critical information from consumers and illegally stifle consumer choice. When coupled with Apple's incipient antitrust violations, these anti-steering provisions are anticompetitive and a nationwide remedy to eliminate those provisions is warranted."

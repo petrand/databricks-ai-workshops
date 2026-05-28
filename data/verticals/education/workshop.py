@@ -30,6 +30,7 @@ VERTICAL = WorkshopVertical(
     ),
     mlflow_experiment_suffix="edupath-agent-workshop",
     generate_tables=tables.generate,
+    table_descriptions=tables.TABLE_DESCRIPTIONS,
     udf_name="student_forecast",
     udf_sql=_udf_sql,
 )

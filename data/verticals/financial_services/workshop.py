@@ -5,19 +5,33 @@ from verticals.financial_services import tables
 
 
 def _genie_title(schema: str) -> str:
-    return f"Meridian_Capital_Data_({schema})"
+    return f"Financial_Services_Data_({schema})"
 
 
 def _udf_sql(full_schema: str) -> str:
     return f"""
-CREATE OR REPLACE FUNCTION {full_schema}.portfolio_forecast(current_aum DOUBLE, monthly_growth_pct DOUBLE)
-RETURNS ARRAY<DOUBLE>
-LANGUAGE PYTHON
-AS $$
-def f(current_aum: float, monthly_growth_pct: float = 0.5) -> list:
-    return [round(current_aum * (1 + monthly_growth_pct / 100) ** i, 2) for i in range(1, 7)]
-return f(current_aum, monthly_growth_pct)
-$$"""
+CREATE OR REPLACE FUNCTION {full_schema}.weekly_close_spread(ticker_symbol STRING)
+RETURNS DOUBLE
+RETURN (
+  WITH recent_closes AS (
+    SELECT date, close
+    FROM {full_schema}.dailyprice
+    WHERE ticker = ticker_symbol AND close IS NOT NULL
+    ORDER BY date DESC
+    LIMIT 7
+  ),
+  daily_returns AS (
+    SELECT
+      date,
+      (close / LAG(close) OVER (ORDER BY date) - 1) * 100 AS daily_return_pct
+    FROM recent_closes
+  )
+  SELECT CASE
+    WHEN COUNT(daily_return_pct) < 2 THEN NULL
+    ELSE ROUND(STDDEV_SAMP(daily_return_pct), 6)
+  END
+  FROM daily_returns
+)"""
 
 
 def _generate_tables(
@@ -46,10 +60,13 @@ VERTICAL = WorkshopVertical(
     genie_description=(
         "Meridian Capital Partners: clients, accounts, portfolio_holdings, dailyprice, "
         "and company_profile. Use dailyprice for price moves around dates; pair with "
-        "policy_docs_index (Vector Search) for historically similar market-shock news."
+        "market_news_index (Vector Search) for historically similar market-shock news."
     ),
     mlflow_experiment_suffix="meridian-agent-workshop",
     generate_tables=_generate_tables,
-    udf_name="portfolio_forecast",
+    table_descriptions=tables.TABLE_DESCRIPTIONS,
+    chunk_table_name="market_news_chunked",
+    doc_index_name="market_news_index",
+    udf_name="weekly_close_spread",
     udf_sql=_udf_sql,
 )

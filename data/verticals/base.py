@@ -35,5 +35,8 @@ class WorkshopVertical:
     genie_description: str
     mlflow_experiment_suffix: str
     generate_tables: Callable[..., list[str]]
+    table_descriptions: dict[str, str] | None = None
+    chunk_table_name: str = "policy_docs_chunked"
+    doc_index_name: str = "policy_docs_index"
     udf_name: str | None = None
     udf_sql: Callable[[str], str] | None = None
