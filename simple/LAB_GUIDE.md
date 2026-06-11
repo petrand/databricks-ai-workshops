@@ -37,7 +37,7 @@ For a summary of what this workshop builds, see the [README](./README.md).
 |----------|------------------|-----------------|-----------|
 | `retail` | FreshMart (grocery chain) | Customers, products, stores, transactions | Store policies (returns, loyalty, delivery) |
 | `education` | EduPath Academy (higher education) | Students, courses, campuses, enrollments | Academic policies (grading, attendance, refunds) |
-| `financial_services` | Meridian Capital Partners (investment firm) | Clients, accounts, holdings, daily prices | Market-shock news articles (AAPL, TSLA) |
+| `financial_services` | Meridian Capital Partners (investment firm) | Clients, accounts, simulated trade ledger, derived holdings, real daily prices | Market-shock news articles (AAPL, TSLA) |
 
 The walkthrough below is industry-neutral. Wherever it says to ask the agent questions or set a system prompt, use your industry's versions from **[Appendix A](#appendix-a-per-industry-content)**.
 
@@ -109,7 +109,7 @@ When the notebook finishes, you'll have (names depend on your industry):
 
 | Resource | `retail` | `education` | `financial_services` |
 |----------|----------|-------------|----------------------|
-| Structured tables | customers, products, stores, transactions, transaction_items, payment_history | (same table names, education semantics) | clients, accounts, portfolio_holdings, dailyprice, company_profile |
+| Structured tables | customers, products, stores, transactions, transaction_items, payment_history | (same table names, education semantics) | clients, accounts, trades, portfolio_holdings, dailyprice, company_profile |
 | Chunked docs table | `policy_docs_chunked` | `policy_docs_chunked` | `market_news_chunked` |
 | Vector Search endpoint | `retail-vs-<schema>` | `education-vs-<schema>` | `fsi-vs-<schema>` |
 | Vector Search index | `<catalog>.<schema>.policy_docs_index` | `<catalog>.<schema>.policy_docs_index` | `<catalog>.<schema>.market_news_index` |
@@ -663,9 +663,11 @@ Guidelines:
 
 ### A.3 Financial Services — Meridian Capital Partners
 
+> **How the Meridian data fits together:** the `trades` table is a simulated buy/sell ledger executed on real trading dates at real closing prices (from the snapshotted Marketplace `dailyprice`). `portfolio_holdings` (quantity, average cost, realized/unrealized P&L) and account cash balances are **derived from that ledger**, so exposure questions, trade-history questions, and price questions all reconcile. Clients also react to real market shocks — risk-averse clients sell after big drops, risk-seeking ones buy the dip — which is what makes the multi-tool questions below interesting.
+
 **Playground system prompt:**
 ```
-You are Meridian Assistant, a knowledgeable agent for Meridian Capital Partners, an investment management firm. You help analysts with data questions about clients, accounts, portfolio holdings, and market prices, as well as market news research.
+You are Meridian Assistant, a knowledgeable agent for Meridian Capital Partners, an investment management firm. You help analysts with data questions about clients, accounts, the trade ledger, portfolio holdings, and market prices, as well as market news research.
 
 Guidelines:
 - Be conversational and helpful
@@ -679,13 +681,15 @@ Guidelines:
 
 **Data queries (Genie):**
 1. "How many clients do we have?"
-2. "What are the largest portfolio holdings by value?"
+2. "What are the largest portfolio holdings by market value?"
 3. "Show AAPL's closing price over the last 30 days"
 4. "Which clients have a High risk rating?"
-5. "What's the total value of holdings by account type?"
-6. "What was TSLA's biggest single-day price drop?"
-7. "How many accounts does our largest client have?"
-8. "Compare average daily trading volume for AAPL and TSLA"
+5. "What's our net exposure to TSLA across all portfolios?"
+6. "Which accounts have the largest unrealized losses?"
+7. "Who were the most active traders last quarter?"
+8. "What was TSLA's biggest single-day price drop?"
+9. "Show total realized P&L by client, best to worst"
+10. "What's the total market value of holdings by account type?"
 
 **Market news lookups (Vector Search):**
 
@@ -701,10 +705,11 @@ Guidelines:
 
 **Multi-tool questions (both):**
 1. "How did AAPL's price move around the tariff announcement, and what did the news say at the time?"
-2. "Which clients hold TSLA, and what recent news could affect their positions?"
-3. "Find AAPL's biggest single-day drop and the news coverage from that period"
+2. "Which clients sold TSLA in the days after its biggest price drop, and what did the news report that week?"
+3. "Which clients hold TSLA today, and what recent news could affect their positions?"
 4. "What's our total exposure to Apple across all portfolios, and what regulatory risks does the news mention?"
-5. "Compare TSLA's volatility this month with the market events reported in the news" (also exercises the `weekly_close_spread` UC function if added as a tool)
+5. "Did any clients buy the dip after the tariff sell-off? What was the news context?"
+6. "Compare TSLA's volatility this month with the market events reported in the news" (also exercises the `weekly_close_spread` UC function if added as a tool)
 
 **Edge cases (test agent limits):**
 1. "What's the weather like today?" (out of scope)

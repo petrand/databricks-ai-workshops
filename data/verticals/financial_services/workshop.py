@@ -51,9 +51,11 @@ VERTICAL = WorkshopVertical(
     brand="Meridian Capital Partners",
     genie_title=_genie_title,
     genie_description=(
-        "Meridian Capital Partners: clients, accounts, portfolio_holdings, dailyprice, "
-        "and company_profile. Use dailyprice for price moves around dates; pair with "
-        "market_news_index (Vector Search) for historically similar market-shock news."
+        "Meridian Capital Partners: clients, accounts, trades, portfolio_holdings, "
+        "dailyprice, and company_profile. The trades ledger drives holdings, P&L, and "
+        "cash balances; trades execute at real closing prices. Use dailyprice for price "
+        "moves around dates; pair with market_news_index (Vector Search) for "
+        "historically similar market-shock news."
     ),
     mlflow_experiment_suffix="meridian-agent-workshop",
     generate_tables=tables.generate,
