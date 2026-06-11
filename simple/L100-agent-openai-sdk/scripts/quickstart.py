@@ -531,7 +531,7 @@ def create_mlflow_experiment(
     if experiment_suffix:
         workshop_name = f"/Users/{username}/{experiment_suffix}"
         try:
-            exp = w.experiments.get_experiment_by_name(experiment_name=workshop_name).experiment
+            exp = w.experiments.get_by_name(workshop_name).experiment
             if exp and exp.experiment_id:
                 print_success(
                     f"Reusing workshop experiment '{workshop_name}' (ID: {exp.experiment_id})"
