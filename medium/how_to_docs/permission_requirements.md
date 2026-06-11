@@ -1,264 +1,168 @@
-# Databricks Permission Requirements — L200 "Build an AI Agent with Memory" Workshop
+# Admin Grants for Workshop Participants — L200 "Build an AI Agent with Memory"
 
-This document lists every Databricks permission, entitlement, and feature a participant
-needs to complete the **medium** workshop end-to-end: preparing data, running the agent
-locally, and deploying it as a Databricks App with Lakebase-backed memory.
+This document lists **only the grants and entitlements a workspace/account admin must give to
+each workshop participant** so they can complete the **medium** workshop: prepare the data, run
+the agent locally, and deploy it as a Databricks App with Lakebase-backed memory.
 
-It is written for two audiences:
+**Scope assumption:** participants grant their own deployed app's **service principal** whatever
+it needs (Unity Catalog `SELECT`, Genie `Can Run`, Lakebase access) as part of the workshop
+guides — that is *not* an admin task and is **out of scope** here. See the bottom of this doc for
+what participants handle themselves.
 
-- **Workshop participants** — check you (or your workspace) have what's listed before you start.
-- **Workspace admins** — use the [Admin pre-flight checklist](#admin-pre-flight-checklist) to provision a workspace for a cohort.
-
-> **Two identities are involved.** Most steps run as **you** (your Databricks user, via CLI
-> OAuth or notebook). The final deployed app runs as an **app service principal (SP)** — a
-> separate identity that needs its *own* grants. Permissions are called out for each.
+> **Tip:** Put all participants in a group (e.g. `workshop-users`) and apply every grant below to
+> the group once, rather than per user.
 
 ---
 
 ## Quick reference
 
-| Area | Capability needed | Who needs it | Granted as |
+| # | Grant / enablement | Scope | Where the admin sets it |
 |---|---|---|---|
-| Workspace | Log in + workspace access entitlement | You | Account/workspace admin |
-| Compute | Serverless notebooks / compute | You | Workspace entitlement |
-| Compute | A running **SQL warehouse** with `CAN_USE` | You | Warehouse ACL |
-| Unity Catalog | `USE CATALOG` + `CREATE SCHEMA` on target catalog | You | UC privilege |
-| Unity Catalog | `USE SCHEMA`, `CREATE TABLE`, `SELECT`, `MODIFY` on the schema | You | UC privilege |
-| Vector Search | Create a Vector Search **endpoint** + **index** | You | Feature enabled + UC `CREATE TABLE` |
-| Foundation Models | `CAN_QUERY` on `databricks-gte-large-en` (embeddings) | You | Serving endpoint ACL |
-| Foundation Models | `CAN_QUERY` on the chat model (e.g. `databricks-claude-sonnet-4-6`) | You **and** app SP | Serving endpoint ACL |
-| Genie | Create + run a Genie Space | You | Genie enabled |
-| MLflow | Create an experiment in your `/Users/<you>` folder | You | Workspace folder ACL |
-| Lakebase (OLTP) | Create a database instance; admin/owner role on it | You | Lakebase feature + DB role |
-| Databricks Apps | Create / deploy an app | You | Apps enabled + `CAN_MANAGE` |
-| Workspace files | Write to `/Users/<you>`; create Repos/Git folder | You | Workspace ACL |
-| Web Terminal | Enabled (workspace-only deploy path) | You | Admin setting |
+| 1 | Workspace access | Per user/group | Admin console → entitlements |
+| 1 | Databricks SQL access | Per user/group | Admin console → entitlements |
+| 1 | Serverless / cluster use | Per user/group | Admin console → entitlements |
+| 2 | Unity Catalog enabled | Workspace | Account/metastore |
+| 2 | Vector Search enabled | Workspace/region | Workspace setting |
+| 2 | Foundation Model APIs enabled | Workspace/region | Workspace setting |
+| 2 | Genie enabled | Workspace | Workspace setting |
+| 2 | Lakebase / Database Instances enabled | Workspace | Workspace setting |
+| 2 | Databricks Apps enabled | Workspace | Workspace setting |
+| 2 | Web Terminal enabled | Workspace | Settings → Developer |
+| 2 | Repos / Git folders allowed | Workspace | Workspace setting |
+| 3 | `CAN_USE` on a running **SQL warehouse** | Warehouse | Warehouse permissions |
+| 4 | `USE CATALOG` + `CREATE SCHEMA` on a catalog | Catalog | Catalog Explorer / `GRANT` |
+| 5 | `CAN_QUERY` on `databricks-gte-large-en` | Serving endpoint | Serving endpoint permissions |
+| 5 | `CAN_QUERY` on the chat model (e.g. `databricks-claude-sonnet-4-6`) | Serving endpoint | Serving endpoint permissions |
+| 6 | Can **create Vector Search endpoints** | Workspace | Feature access |
+| 6 | Can **create Genie Spaces** | Workspace | Genie access |
+| 6 | Can **create Lakebase instances** | Workspace | Lakebase/OLTP access |
+| 6 | Can **create Databricks Apps** | Workspace | Apps access |
 
 ---
 
-## 1. Workspace & account access
+## 1. Per-user entitlements (admin console)
 
-- **A Databricks account and workspace login.** Unity Catalog must be enabled on the workspace.
-- **Workspace access entitlement** (`workspace-access`) so you can open notebooks, the file browser, and the SQL/Compute UIs.
-- **Local CLI path only:** ability to authenticate the Databricks CLI. The workshop uses
-  **OAuth (U2M)** via `databricks auth login` — no personal access token is strictly required,
-  but if your org disables OAuth you'll need PAT generation enabled (`Allow personal access tokens`).
+Grant these entitlements to each participant (or the `workshop-users` group):
 
-## 2. Compute
+- **Workspace access** (`workspace-access`) — open notebooks, the file browser, Compute/SQL UIs.
+- **Databricks SQL access** (`databricks-sql-access`) — use SQL warehouses and the SQL editor
+  (needed for the data setup and for granting the SP later).
+- **Serverless / compute use** — the data setup notebook runs on **serverless** compute. Ensure
+  participants can attach to serverless (or grant cluster-create / `CAN_ATTACH` on a shared
+  cluster that runs Spark SQL + Python).
 
-- **Serverless compute access.** The data setup notebook (`01_quickstart_setup.py`) is run on
-  **serverless** compute. You need the entitlement to attach notebooks to serverless (or to a
-  cluster that can run Spark SQL + Python).
-- **A running SQL warehouse you can use (`CAN_USE`).** Required because:
-  - The Genie Space is bound to a SQL warehouse (the notebook picks the first available warehouse).
-  - The local-CLI data path (Option B) passes `--warehouse-id` to run the SQL/chunking scripts.
-  - If no warehouse is running/visible to you, Genie Space creation is skipped with a warning.
+## 2. Workspace features to enable
 
-## 3. Unity Catalog (data preparation)
+These are workspace/region-level toggles (no per-user object ACL). Confirm all are on:
 
-The setup notebook writes into a catalog + schema you choose via widgets. It runs
-`CREATE SCHEMA IF NOT EXISTS` and creates **7 tables** plus the Vector Search index.
+- **Unity Catalog** (required throughout).
+- **Vector Search** (in a supported region).
+- **Foundation Model APIs** (pay-per-token; in a supported region).
+- **Genie**.
+- **Lakebase / Database Instances** (OLTP).
+- **Databricks Apps**.
+- **Web Terminal** (Settings → Developer) — required for the recommended workspace-only deploy path.
+- **Repos / Git folders** — allow Git folder creation; make sure participants can add Git credentials.
 
-On the **target catalog** you need:
+## 3. Compute — SQL warehouse
 
-- `USE CATALOG`
-- `CREATE SCHEMA` (unless you point at a schema that already exists and you can write to)
+- Grant **`CAN_USE`** on at least one **running SQL warehouse** to all participants.
+- This is needed because the Genie Space is bound to a warehouse and the data setup uses one. If
+  no warehouse is running/visible, Genie Space creation is skipped.
 
-On the **target schema** (whether you create it or reuse one) you need:
+## 4. Unity Catalog — where participants create data
 
-- `USE SCHEMA`
-- `CREATE TABLE`
-- `SELECT` and `MODIFY` on the tables it creates
+Participants create a schema and ~7 tables plus the Vector Search index. The simplest model is to
+let each participant **own their own schema** (so they automatically get table privileges).
 
-Tables created: `customers`, `products`, `stores`, `transactions`, `transaction_items`,
-`payment_history`, `policy_docs_chunked` (the source for the Vector Search index).
+Grant on a shared/sandbox catalog (or a per-user catalog):
 
-> **Catalog creation is optional.** A `CREATE CATALOG` line exists in the notebook but is
-> commented out. Only enable it (and hold the `CREATE CATALOG` privilege on the metastore) if
-> you want a dedicated catalog. Most participants should reuse an existing catalog such as
-> `users` or a sandbox catalog where they already have `CREATE SCHEMA`.
+- **`USE CATALOG`**
+- **`CREATE SCHEMA`**
 
-## 4. Vector Search
+Example:
 
-The notebook creates a **Vector Search endpoint** and a **Delta Sync index**
-(`<catalog>.<schema>.policy_docs_index`, HYBRID, TRIGGERED).
+```sql
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG <catalog> TO `workshop-users`;
+```
 
-You need:
+> If you instead pre-create one schema per participant, grant `USE SCHEMA` + `CREATE TABLE` on
+> that schema. Granting `CREATE SCHEMA` and letting users make (and own) their own schema is
+> simpler and avoids per-table grants. `CREATE CATALOG` is **not** required — the catalog-creation
+> step in the setup notebook is commented out.
 
-- **Vector Search enabled** in the workspace/region.
-- Permission to **create a Vector Search endpoint** (`vector_search_endpoints.create_endpoint`).
-- `CREATE TABLE` on the target schema — the index is registered as a UC object.
-- `SELECT` on the source table `policy_docs_chunked` (you'll own it, so this is automatic).
-- **`CAN_QUERY` on the embedding model endpoint `databricks-gte-large-en`** — the Delta Sync
-  index calls this Foundation Model endpoint to generate embeddings. This is a pay-per-token
-  system endpoint and must be enabled in your region.
+## 5. Model serving — Foundation Models
 
-## 5. Foundation Models / AI Gateway (the LLM)
+The Delta Sync Vector Search index calls an embedding endpoint, and the agent calls a chat model.
+Grant **`CAN_QUERY`** to participants on:
 
-The agent calls a chat model through the Foundation Models API / AI Gateway
-(default `databricks-claude-sonnet-4-6`, configurable in `agent_server/agent.py`).
+- **`databricks-gte-large-en`** — embeddings for the Vector Search index.
+- **The chat model** the agent uses (default **`databricks-claude-sonnet-4-6`**, configurable in
+  `agent_server/agent.py`).
 
-- **Foundation Model APIs must be enabled** for the workspace/region.
-- **`CAN_QUERY`** on the chat model serving endpoint is needed by:
-  - **You**, when running the agent locally (`uv run start-app`) — it uses your credentials.
-  - The **app service principal**, when the agent runs deployed.
-- If your org governs model access through AI Gateway, ensure the chosen model is allowed.
+> Pay-per-token system endpoints are often queryable by all users by default. In governed
+> workspaces (where serving-endpoint ACLs are restricted) the admin must grant `CAN_QUERY`
+> explicitly. If your org gates models through AI Gateway, ensure the chosen model is allowed.
 
-## 6. Genie
+## 6. Permission to create the workshop resources
 
-- **Genie enabled** in the workspace.
-- Permission to **create a Genie Space** (`POST /api/2.0/genie/spaces`).
-- The Genie Space is bound to a **SQL warehouse** — see §2 (`CAN_USE`).
-- The deployed app's SP needs **`CAN_RUN`** on the Genie Space. In this workshop that's granted
-  **manually** via the Genie **Share → Can Run** UI (see §11), not through `databricks.yml`.
+Participants create several resources themselves. Ensure they're allowed to:
 
-## 7. MLflow
+- **Create Vector Search endpoints** (plus the index — covered by `CREATE SCHEMA`/owning the schema in §4).
+- **Create Genie Spaces.**
+- **Create Lakebase instances** (autoscaling project + branch + endpoint, or a provisioned instance).
+- **Create Databricks Apps** (deploying creates the app and its service principal).
 
-- The setup/quickstart creates an experiment at `/Users/<your-email>/agents-on-apps`.
-  You implicitly have `CAN_MANAGE` on your own user folder, so no extra grant is normally needed.
-- The deployed app's SP needs **`CAN_MANAGE`** on that experiment (declared in `databricks.yml`, see §11).
-
-## 8. Lakebase (managed PostgreSQL / OLTP)
-
-Lakebase powers both the agent's short-term memory (`agent_openai_memory`) and the chat UI
-history (`ai_chatbot`, `drizzle` schemas).
-
-You need:
-
-- **Lakebase / Database Instances enabled** in the workspace.
-- Permission to **create a Lakebase instance** — either:
-  - **Autoscaling**: create a project + branch + endpoint (`postgres.create_project` / `create_branch`), **or**
-  - **Provisioned**: create a provisioned instance (e.g. `CU_1`).
-  - (You can also bind to an existing instance you have access to.)
-- A **PostgreSQL role with admin/owner rights** on that instance. Lakebase maps your Databricks
-  identity to a Postgres role; you connect as `PGUSER=<your-email>`. You must be able to:
-  - Connect (`CAN_CONNECT_AND_CREATE`).
-  - **Create a Postgres role for the app's SP** and **GRANT** schema/table/sequence privileges to it
-    (the `scripts/grant_lakebase_permissions.py` / Step 11 SQL). This requires role-creation and
-    grant privileges on the database — i.e. you must own the schemas or be a Postgres superuser/admin on the instance.
-
-### Lakebase grants the app SP requires (run by you, after first deploy)
-
-The app SP needs, on each of `agent_openai_memory`, `ai_chatbot`, and `drizzle`:
-
-- Schema: `USAGE`, `CREATE`
-- Tables: `SELECT`, `INSERT`, `UPDATE`, `DELETE` (the guide uses `GRANT ALL ... TO PUBLIC`)
-- **Sequences**: `USAGE`, `SELECT`, `UPDATE` — **granted separately**; table grants alone are not
-  enough (auto-increment / `SERIAL` columns fail with "permission denied for sequence" otherwise).
-
-> **Shortcut:** If you drop all three schemas before the first deploy, the app SP creates them
-> itself and owns them — no grants needed. See Step 9/11 of the setup guide.
-
-## 9. Databricks Apps (deployment)
-
-- **Databricks Apps enabled** in the workspace.
-- Permission to **create and deploy apps** — `CAN_MANAGE` on the app (or workspace permission to
-  create apps). Deploying via `databricks bundle deploy` + `bundle run` (or the Apps UI) creates
-  the app and provisions its **service principal**.
-- App names must be **lowercase letters, numbers, and dashes** (no underscores).
-- To redeploy onto an existing app you need rights to **bind** it
-  (`databricks bundle deployment bind ...`) or **delete** it (`databricks apps delete ...`).
-
-## 10. Workspace files, Repos & Web Terminal
-
-- **Write access to `/Users/<your-email>/`** — the quickstart uploads the `data/` folder and the
-  setup notebook lands here.
-- **Repos / Git folders** (workspace-only path) — permission to create a Git folder and configured
-  Git credentials to clone the repo into the workspace.
-- **Web Terminal enabled** (Settings → Developer → Web Terminal) — required for the recommended
-  workspace-only deploy path (running `databricks bundle` commands in-browser).
-
-## 11. App service-principal grants
-
-When you deploy, the app runs as its **service principal (SP)**. The SP gets some access
-automatically via `databricks.yml` resource bindings, but **Unity Catalog and Genie access are
-granted manually** in this workshop.
-
-### Granted automatically via `databricks.yml`
-
-The bundle in this repo declares only two resource bindings, applied to the SP on deploy:
-
-| Resource | Type in `databricks.yml` | Permission granted to SP |
-|---|---|---|
-| MLflow experiment | `experiment` | `CAN_MANAGE` |
-| Lakebase (autoscaling) | `postgres` (branch + database) | `CAN_CONNECT_AND_CREATE` |
-| Lakebase (provisioned) | `database` (instance + database) | `CAN_CONNECT_AND_CREATE` |
-
-### Granted manually (workspace-only guide, Step 7)
-
-After the first deploy, grant the SP access to the data tools. Get the SP client id with
-`databricks apps get <app-name> --output json | jq -r '.service_principal_client_id'`, then:
-
-- **Unity Catalog** — run in the SQL editor (the SP needs to read the Vector Search index's
-  underlying tables):
-  ```sql
-  GRANT USE CATALOG ON CATALOG <catalog> TO `<sp-client-id>`;
-  GRANT USE SCHEMA  ON SCHEMA  <catalog>.<schema> TO `<sp-client-id>`;
-  GRANT SELECT      ON SCHEMA  <catalog>.<schema> TO `<sp-client-id>`;
-  ```
-- **Genie Space** — open the Genie Space → **Share** → add the SP → grant **Can Run**.
-- **Lakebase** — the schema/table/sequence grants in §8 (local-CLI guide grants `TO PUBLIC`; the
-  workspace-only flow notes Lakebase access is handled by the bundle's `CAN_CONNECT_AND_CREATE`,
-  with the app owning the tables it creates).
-
-> **Alternative (bundle-managed tool grants):** instead of manual SQL/Share, you can declare the
-> tools as resources in `databricks.yml` (`uc_securable` + `securable_type: TABLE` → `SELECT` for a
-> VS index; `genie_space` → `CAN_RUN`; `uc_securable` + `FUNCTION` → `EXECUTE`; `sql_warehouse` →
-> `CAN_USE`). This repo's `databricks.yml` does **not** include them by default — see the
-> `add-tools` skill. Either way, you must hold permission to grant on those securables.
-
-> These grants apply only to the **deployed** app. **Local development uses your personal
-> credentials and bypasses them** — which is why a local run can succeed while the deployed app
-> returns `PERMISSION_DENIED` / 403 from a tool until the matching grant is added.
+These are governed by the corresponding feature being enabled (§2) plus, in locked-down
+workspaces, a "users may create …" setting or `CAN_MANAGE`-type permission. If participants can't
+create one of these, that's the admin lever to flip.
 
 ---
 
-## Admin pre-flight checklist
+## What participants handle themselves (no admin action)
 
-Provision these once per workspace so a cohort can self-serve:
+These are **out of scope** for the admin — listed so there's no confusion:
 
-- [ ] Unity Catalog enabled; participants have `USE CATALOG` + `CREATE SCHEMA` on a shared/sandbox
-      catalog (or a per-user catalog/schema).
-- [ ] Serverless compute enabled for participants.
-- [ ] At least one **SQL warehouse** running with `CAN_USE` for all participants (Genie needs it).
-- [ ] **Vector Search** enabled in-region.
-- [ ] **Foundation Model APIs** enabled; `CAN_QUERY` on `databricks-gte-large-en` and the chat
-      model (`databricks-claude-sonnet-4-6` or your chosen model).
-- [ ] **Genie** enabled with space-creation allowed.
-- [ ] **Lakebase / Database Instances** enabled; participants can create instances (or a shared
-      instance is provided with role-creation/grant rights).
-- [ ] **Databricks Apps** enabled; participants can create apps.
-- [ ] **Web Terminal** enabled (Settings → Developer) for the workspace-only path.
-- [ ] **Repos / Git folders** allowed, with Git credentials set up.
-- [ ] Participants can write to their own `/Users/<email>/` workspace folder.
+- **MLflow experiment** — created in the participant's own `/Users/<email>` folder, which they
+  already own (`CAN_MANAGE`). No grant needed.
+- **Service-principal grants for the deployed app** — after deploying, participants grant their
+  app's SP what it needs:
+  - Unity Catalog `USE CATALOG` / `USE SCHEMA` / `SELECT` on their schema,
+  - Genie Space **Can Run** (Share dialog),
+  - Lakebase schema/table/sequence grants (or let the app create+own its tables).
+  
+  This is documented in the workshop guides (`WORKSHOP_INSTRUCTIONS.md`,
+  `WORKSHOP_INSTRUCTIONS_WORKSPACE.md`, Step 7). Participants can only grant what they own, which
+  is why §4 has them owning their schema.
+- **Writing to their own workspace folder** — default for any user with workspace access.
 
 ---
 
-## Common permission-related failures
+## Verification (optional, per participant)
 
-| Symptom | Missing permission |
-|---|---|
-| `Schema '<x>' does not exist` / cannot `CREATE SCHEMA` | `CREATE SCHEMA` / `USE CATALOG` on the catalog |
-| "No SQL warehouse found" (Genie skipped) | No running warehouse with `CAN_USE` |
-| Vector Search index never becomes ready / embedding errors | `CAN_QUERY` on `databricks-gte-large-en`, or VS not enabled |
-| Agent LLM calls fail (local or deployed) | `CAN_QUERY` on the chat model endpoint (you / app SP) |
-| **403** / `PERMISSION_DENIED` from an MCP tool on the **deployed** app | SP missing UC `SELECT` or Genie `CAN_RUN` — grant manually (§11) |
-| `permission denied for schema` (deployed app) | App SP not granted on Lakebase schema (§8) |
-| `permission denied for sequence` | Sequence grants missing — grant `USAGE, SELECT, UPDATE` on sequences separately (§8) |
-| Cannot create Lakebase role for SP / GRANT fails | Your Lakebase role lacks role-creation/admin rights on the instance |
-| `An app with the same name already exists` | Need rights to bind or delete the existing app (§9) |
+A participant can sanity-check their access before starting:
+
+```sql
+-- Unity Catalog: can they create a schema?
+CREATE SCHEMA IF NOT EXISTS <catalog>.<test_schema>;
+```
+
+```bash
+# SQL warehouse visible + usable?
+databricks warehouses list --profile <profile>
+
+# Foundation model endpoints queryable?
+databricks serving-endpoints list --profile <profile>
+```
+
+If schema creation, warehouse use, or endpoint listing fails, the matching grant above is missing.
 
 ---
 
 ## Source references (within this repo)
 
-Paths are relative to the repo root. The workshop lives under `medium/`; the data setup lives at
-the repo-root `data/`.
-
-- `medium/WORKSHOP_INSTRUCTIONS.md` — local-CLI path (auth, deploy, Step 7 Lakebase grants)
-- `medium/WORKSHOP_INSTRUCTIONS_WORKSPACE.md` — workspace-only path, incl. Step 7 manual UC + Genie SP grants
-- `data/README.md` — data setup (Path A local CLI / Path B workspace notebook)
+- `medium/WORKSHOP_INSTRUCTIONS.md` — local-CLI participant guide
+- `medium/WORKSHOP_INSTRUCTIONS_WORKSPACE.md` — workspace-only guide (prereqs list features to enable)
+- `data/README.md` — data setup paths
 - `data/workspace_setup_script/01_quickstart_setup.py` — creates UC tables, Vector Search index, Genie Space, MLflow experiment
-- `medium/databricks.yml` — app resource bindings (experiment + postgres)
 - `medium/scripts/quickstart.py` — auth, MLflow experiment, Lakebase provisioning
-- `medium/scripts/grant_lakebase_permissions.py` — exact Lakebase schema/table/sequence grants for the SP
