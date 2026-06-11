@@ -23,12 +23,38 @@ Not SQL. Create an account-level group, then add each participant.
 # Create the workshop group
 databricks account groups create --display-name "genie_day_group"
 
-# Add each participant (repeat per user, or do it in bulk in the admin console)
-databricks account groups patch <group-id> \
-  --json '{"Operations":[{"op":"add","path":"members","value":[{"value":"<user-id>"}]}]}'
+# Resolve the group id once (reused below)
+GID=$(databricks account groups list \
+  --filter 'displayName eq "genie_day_group"' --output json | jq -r '.[0].id')
+
+# Helper: add one user (by email) to the group
+add_user() {
+  UID=$(databricks account users list \
+    --filter "userName eq \"$1\"" --output json | jq -r '.[0].id')
+  databricks account groups patch "$GID" --json \
+    "{\"Operations\":[{\"op\":\"add\",\"path\":\"members\",\"value\":[{\"value\":\"$UID\"}]}]}"
+}
+
+# One line per participant — edit these emails
+add_user alice@acme.com
+add_user bob@acme.com
+add_user carol@acme.com
+add_user dave@acme.com
+add_user erin@acme.com
+add_user frank@acme.com
+add_user grace@acme.com
+add_user heidi@acme.com
+add_user ivan@acme.com
+add_user judy@acme.com
+add_user mallory@acme.com
+add_user niaj@acme.com
+add_user olivia@acme.com
+add_user peggy@acme.com
+add_user trent@acme.com
 ```
 
-Easiest in the UI: **Admin Settings → Identity and access → Groups → genie_day_group → Add members**.
+Users must already exist in the account. Easiest alternative: add them in the UI via
+**Admin Settings → Identity and access → Groups → genie_day_group → Add members**.
 
 ---
 
