@@ -1,60 +1,42 @@
 -- ============================================================================
 -- L200 "Build an AI Agent with Memory" Workshop
--- Unity Catalog grants — workshop group can create its own schemas
+-- Unity Catalog grants — SQL ONLY
 --
--- Model: one shared catalog; every participant (via the genie_day_group group)
--- can create — and own — their own schema inside it. Owning the schema grants
--- full control (CREATE TABLE, SELECT, MODIFY, build the Vector Search index,
--- and later grant their own app's service principal) with no per-table grants.
+-- IMPORTANT: Databricks has NO SQL to create a group or add users to one — that
+-- is done in the account console / SCIM / CLI. For a pure-SQL workflow we skip
+-- the group and grant schema-creation rights DIRECTLY to each participant on the
+-- shared workshop catalog. Each user then creates and OWNS their own schema in
+-- <catalog>, which gives full control (CREATE TABLE, SELECT, MODIFY, build the
+-- Vector Search index, and later grant their own app's service principal).
+--
+-- Run as a metastore admin or owner of <catalog>.
+-- Replace <catalog>, then replace the example emails with your participants'.
 -- ============================================================================
 
--- ----------------------------------------------------------------------------
--- Step 1 — Create the group + add members  (NOT SQL — run in a shell via CLI)
--- ----------------------------------------------------------------------------
---   # Create the workshop group
---   databricks account groups create --display-name "genie_day_group"
---
---   # Resolve the group id once (reused below)
---   GID=$(databricks account groups list \
---     --filter 'displayName eq "genie_day_group"' --output json | jq -r '.[0].id')
---
---   # Helper: add one user (by email) to the group
---   add_user() {
---     UID=$(databricks account users list \
---       --filter "userName eq \"$1\"" --output json | jq -r '.[0].id')
---     databricks account groups patch "$GID" --json \
---       "{\"Operations\":[{\"op\":\"add\",\"path\":\"members\",\"value\":[{\"value\":\"$UID\"}]}]}"
---   }
---
---   # One line per participant — edit these emails
---   add_user alice@acme.com
---   add_user bob@acme.com
---   add_user carol@acme.com
---   add_user dave@acme.com
---   add_user erin@acme.com
---   add_user frank@acme.com
---   add_user grace@acme.com
---   add_user heidi@acme.com
---   add_user ivan@acme.com
---   add_user judy@acme.com
---   add_user mallory@acme.com
---   add_user niaj@acme.com
---   add_user olivia@acme.com
---   add_user peggy@acme.com
---   add_user trent@acme.com
---
---   # (Users must already exist in the account. UI alternative:
---   #  Admin Settings -> Identity and access -> Groups -> genie_day_group -> Add members)
--- ----------------------------------------------------------------------------
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `alice@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `bob@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `carol@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `dave@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `erin@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `frank@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `grace@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `heidi@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `ivan@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `judy@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `mallory@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `niaj@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `olivia@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `peggy@acme.com`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `trent@acme.com`;
 
 -- ----------------------------------------------------------------------------
--- Step 2 — Grant the group schema-creation rights on the workshop catalog (SQL)
--- Run as a metastore admin or owner of <catalog>. Replace <catalog>.
--- ----------------------------------------------------------------------------
-GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `genie_day_group`;
-
--- Note:
+-- Notes:
 --  * CREATE CATALOG is NOT required — the setup notebook's catalog-creation step
 --    is commented out; participants reuse <catalog>.
---  * SQL-warehouse and Foundation-Model endpoint access are NOT SQL — grant those
---    to genie_day_group via the CLI (see permission_requirements.md).
+--  * SQL-warehouse and Foundation-Model endpoint access are NOT SQL — see
+--    permission_requirements.md for the CLI steps.
+--  * If you prefer a GROUP instead of 15 lines: create `genie_day_group` in the
+--    account console/CLI first (not possible in SQL), then this single grant
+--    replaces all the lines above:
+--      GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `genie_day_group`;
+-- ----------------------------------------------------------------------------
