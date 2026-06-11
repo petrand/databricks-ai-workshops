@@ -109,7 +109,8 @@ The agent calls a chat model through the Foundation Models API / AI Gateway
 - **Genie enabled** in the workspace.
 - Permission to **create a Genie Space** (`POST /api/2.0/genie/spaces`).
 - The Genie Space is bound to a **SQL warehouse** — see §2 (`CAN_USE`).
-- The deployed app's SP needs **`CAN_RUN`** on the Genie Space (declared in `databricks.yml`, see §11).
+- The deployed app's SP needs **`CAN_RUN`** on the Genie Space. In this workshop that's granted
+  **manually** via the Genie **Share → Can Run** UI (see §11), not through `databricks.yml`.
 
 ## 7. MLflow
 
@@ -167,24 +168,48 @@ The app SP needs, on each of `agent_openai_memory`, `ai_chatbot`, and `drizzle`:
 - **Web Terminal enabled** (Settings → Developer → Web Terminal) — required for the recommended
   workspace-only deploy path (running `databricks bundle` commands in-browser).
 
-## 11. App service-principal grants (declared in `databricks.yml`)
+## 11. App service-principal grants
 
-When you deploy, these resource bindings are applied to the app SP. You must have permission to
-grant each (i.e. you must be able to manage/share these resources):
+When you deploy, the app runs as its **service principal (SP)**. The SP gets some access
+automatically via `databricks.yml` resource bindings, but **Unity Catalog and Genie access are
+granted manually** in this workshop.
+
+### Granted automatically via `databricks.yml`
+
+The bundle in this repo declares only two resource bindings, applied to the SP on deploy:
 
 | Resource | Type in `databricks.yml` | Permission granted to SP |
 |---|---|---|
 | MLflow experiment | `experiment` | `CAN_MANAGE` |
 | Lakebase (autoscaling) | `postgres` (branch + database) | `CAN_CONNECT_AND_CREATE` |
 | Lakebase (provisioned) | `database` (instance + database) | `CAN_CONNECT_AND_CREATE` |
-| Vector Search index | `uc_securable` + `securable_type: TABLE` | `SELECT` |
-| Genie Space | `genie_space` | `CAN_RUN` |
-| UC Function (if added) | `uc_securable` + `securable_type: FUNCTION` | `EXECUTE` |
-| SQL Warehouse (if added) | `sql_warehouse` | `CAN_USE` |
+
+### Granted manually (workspace-only guide, Step 7)
+
+After the first deploy, grant the SP access to the data tools. Get the SP client id with
+`databricks apps get <app-name> --output json | jq -r '.service_principal_client_id'`, then:
+
+- **Unity Catalog** — run in the SQL editor (the SP needs to read the Vector Search index's
+  underlying tables):
+  ```sql
+  GRANT USE CATALOG ON CATALOG <catalog> TO `<sp-client-id>`;
+  GRANT USE SCHEMA  ON SCHEMA  <catalog>.<schema> TO `<sp-client-id>`;
+  GRANT SELECT      ON SCHEMA  <catalog>.<schema> TO `<sp-client-id>`;
+  ```
+- **Genie Space** — open the Genie Space → **Share** → add the SP → grant **Can Run**.
+- **Lakebase** — the schema/table/sequence grants in §8 (local-CLI guide grants `TO PUBLIC`; the
+  workspace-only flow notes Lakebase access is handled by the bundle's `CAN_CONNECT_AND_CREATE`,
+  with the app owning the tables it creates).
+
+> **Alternative (bundle-managed tool grants):** instead of manual SQL/Share, you can declare the
+> tools as resources in `databricks.yml` (`uc_securable` + `securable_type: TABLE` → `SELECT` for a
+> VS index; `genie_space` → `CAN_RUN`; `uc_securable` + `FUNCTION` → `EXECUTE`; `sql_warehouse` →
+> `CAN_USE`). This repo's `databricks.yml` does **not** include them by default — see the
+> `add-tools` skill. Either way, you must hold permission to grant on those securables.
 
 > These grants apply only to the **deployed** app. **Local development uses your personal
-> credentials and bypasses them** — which is why the local run can succeed while the deployed app
-> returns 403s from a tool until the matching grant is added and the app redeployed.
+> credentials and bypasses them** — which is why a local run can succeed while the deployed app
+> returns `PERMISSION_DENIED` / 403 from a tool until the matching grant is added.
 
 ---
 
@@ -217,7 +242,7 @@ Provision these once per workspace so a cohort can self-serve:
 | "No SQL warehouse found" (Genie skipped) | No running warehouse with `CAN_USE` |
 | Vector Search index never becomes ready / embedding errors | `CAN_QUERY` on `databricks-gte-large-en`, or VS not enabled |
 | Agent LLM calls fail (local or deployed) | `CAN_QUERY` on the chat model endpoint (you / app SP) |
-| **403** from an MCP tool on the **deployed** app | Missing `uc_securable` / `genie_space` grant in `databricks.yml` (§11) |
+| **403** / `PERMISSION_DENIED` from an MCP tool on the **deployed** app | SP missing UC `SELECT` or Genie `CAN_RUN` — grant manually (§11) |
 | `permission denied for schema` (deployed app) | App SP not granted on Lakebase schema (§8) |
 | `permission denied for sequence` | Sequence grants missing — grant `USAGE, SELECT, UPDATE` on sequences separately (§8) |
 | Cannot create Lakebase role for SP / GRANT fails | Your Lakebase role lacks role-creation/admin rights on the instance |
@@ -227,10 +252,13 @@ Provision these once per workspace so a cohort can self-serve:
 
 ## Source references (within this repo)
 
-- `lab_instructions/SETUP_GUIDE.md` — local CLI path (Steps 1–12, incl. SP grants in Step 11)
-- `lab_instructions/SETUP_GUIDE_WORKSPACE_ONLY.md` — workspace-only path, prerequisites & deploy
-- `data/workspace_setup_script/01_quickstart_setup.py` — what data resources get created
-- `databricks.yml` — app resource bindings / SP permissions
-- `scripts/quickstart.py` — auth, MLflow experiment, Lakebase provisioning
-- `scripts/grant_lakebase_permissions.py` — exact Lakebase schema/table/sequence grants
-- `RUNSHEET.md` — real-run gotchas, including permission-related ones
+Paths are relative to the repo root. The workshop lives under `medium/`; the data setup lives at
+the repo-root `data/`.
+
+- `medium/WORKSHOP_INSTRUCTIONS.md` — local-CLI path (auth, deploy, Step 7 Lakebase grants)
+- `medium/WORKSHOP_INSTRUCTIONS_WORKSPACE.md` — workspace-only path, incl. Step 7 manual UC + Genie SP grants
+- `data/README.md` — data setup (Path A local CLI / Path B workspace notebook)
+- `data/workspace_setup_script/01_quickstart_setup.py` — creates UC tables, Vector Search index, Genie Space, MLflow experiment
+- `medium/databricks.yml` — app resource bindings (experiment + postgres)
+- `medium/scripts/quickstart.py` — auth, MLflow experiment, Lakebase provisioning
+- `medium/scripts/grant_lakebase_permissions.py` — exact Lakebase schema/table/sequence grants for the SP
