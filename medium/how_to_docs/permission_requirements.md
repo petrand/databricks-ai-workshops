@@ -51,19 +51,23 @@ In the admin console, confirm the `genie-day-workshop` group has:
 
 ---
 
-## Step 3 — Unity Catalog grants (SQL) ✅
+## Step 3 — Unity Catalog: one catalog + one schema per user (SQL) ✅
 
-Real SQL. Run in a SQL editor / notebook. Letting each participant create and **own** their own
-schema avoids per-table grants and lets them later grant their own service principal.
+Real SQL — run as a **metastore admin**. Each participant gets their own catalog and schema and is
+made the **owner**, which grants full control (create the schema's tables and Vector Search index,
+and later grant their own service principal) with no per-table grants.
+
+See **[`workshop_grants.sql`](./workshop_grants.sql)** for the full script. Per user:
 
 ```sql
--- Let workshop users create (and own) schemas in the workshop catalog
-GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `genie-day-workshop`;
+CREATE CATALOG IF NOT EXISTS `<catalog>`;
+ALTER CATALOG `<catalog>` OWNER TO `<user_email>`;
+CREATE SCHEMA IF NOT EXISTS `<catalog>`.`<schema>`;
+ALTER SCHEMA `<catalog>`.`<schema>` OWNER TO `<user_email>`;
 ```
 
-> `CREATE CATALOG` is **not** needed (the setup notebook's catalog-creation step is commented out).
-> If you instead pre-create one schema per user, grant on the schema instead:
-> `GRANT USE SCHEMA, CREATE TABLE ON SCHEMA \`<catalog>\`.\`<schema>\` TO \`genie-day-workshop\`;`
+> Suggested convention: `catalog = workshop_<username>`, `schema = agent`. The SQL file includes a
+> notebook loop for provisioning many users at once.
 
 ---
 
