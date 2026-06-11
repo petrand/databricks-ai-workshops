@@ -1,7 +1,7 @@
 # Admin Provisioning Script — L200 "Build an AI Agent with Memory" Workshop
 
 Run-once setup for an admin to provision a cohort. Everything is keyed to a single group:
-**`genie-day-workshop`**. Apply the grants to the group, add participants to it, done.
+**`genie_day_group`**. Apply the grants to the group, add participants to it, done.
 
 > **What is / isn't SQL.** In Databricks, only **Unity Catalog** privileges are real SQL `GRANT`
 > statements. Creating a group, adding users, entitlements, and SQL-warehouse / serving-endpoint
@@ -21,14 +21,14 @@ Not SQL. Create an account-level group, then add each participant.
 
 ```bash
 # Create the workshop group
-databricks account groups create --display-name "genie-day-workshop"
+databricks account groups create --display-name "genie_day_group"
 
 # Add each participant (repeat per user, or do it in bulk in the admin console)
 databricks account groups patch <group-id> \
   --json '{"Operations":[{"op":"add","path":"members","value":[{"value":"<user-id>"}]}]}'
 ```
 
-Easiest in the UI: **Admin Settings → Identity and access → Groups → genie-day-workshop → Add members**.
+Easiest in the UI: **Admin Settings → Identity and access → Groups → genie_day_group → Add members**.
 
 ---
 
@@ -43,7 +43,7 @@ databricks permission-assignments set \
   --permissions '["USER"]'   # workspace user
 ```
 
-In the admin console, confirm the `genie-day-workshop` group has:
+In the admin console, confirm the `genie_day_group` group has:
 
 - **Workspace access** — open notebooks, file browser, Compute/SQL UIs.
 - **Databricks SQL access** — use SQL warehouses and the SQL editor.
@@ -51,23 +51,20 @@ In the admin console, confirm the `genie-day-workshop` group has:
 
 ---
 
-## Step 3 — Unity Catalog: one catalog + one schema per user (SQL) ✅
+## Step 3 — Unity Catalog grants (SQL) ✅
 
-Real SQL — run as a **metastore admin**. Each participant gets their own catalog and schema and is
-made the **owner**, which grants full control (create the schema's tables and Vector Search index,
-and later grant their own service principal) with no per-table grants.
+Real SQL. Run as a **metastore admin** or owner of the catalog. The `genie_day_group` group is
+granted schema-creation rights on a shared catalog; each participant creates and **owns** their own
+schema, which gives full control (create tables, build the Vector Search index, and later grant
+their own service principal) with no per-table grants.
 
-See **[`workshop_grants.sql`](./workshop_grants.sql)** for the full script. Per user:
+See **[`workshop_grants.sql`](./workshop_grants.sql)** for the full script:
 
 ```sql
-CREATE CATALOG IF NOT EXISTS `<catalog>`;
-ALTER CATALOG `<catalog>` OWNER TO `<user_email>`;
-CREATE SCHEMA IF NOT EXISTS `<catalog>`.`<schema>`;
-ALTER SCHEMA `<catalog>`.`<schema>` OWNER TO `<user_email>`;
+GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `<catalog>` TO `genie_day_group`;
 ```
 
-> Suggested convention: `catalog = workshop_<username>`, `schema = agent`. The SQL file includes a
-> notebook loop for provisioning many users at once.
+> `CREATE CATALOG` is **not** needed (the setup notebook's catalog-creation step is commented out).
 
 ---
 
@@ -79,7 +76,7 @@ Not SQL — warehouse permissions are an object ACL. Grant `CAN_USE` on a **runn
 ```bash
 databricks warehouses update-permissions <warehouse-id> --json '{
   "access_control_list": [
-    { "group_name": "genie-day-workshop", "permission_level": "CAN_USE" }
+    { "group_name": "genie_day_group", "permission_level": "CAN_USE" }
   ]
 }'
 ```
@@ -95,14 +92,14 @@ Search index) and the chat model (used by the agent):
 # Embeddings endpoint (Vector Search index)
 databricks serving-endpoints update-permissions databricks-gte-large-en --json '{
   "access_control_list": [
-    { "group_name": "genie-day-workshop", "permission_level": "CAN_QUERY" }
+    { "group_name": "genie_day_group", "permission_level": "CAN_QUERY" }
   ]
 }'
 
 # Chat model endpoint (agent) — default databricks-claude-sonnet-4-6
 databricks serving-endpoints update-permissions databricks-claude-sonnet-4-6 --json '{
   "access_control_list": [
-    { "group_name": "genie-day-workshop", "permission_level": "CAN_QUERY" }
+    { "group_name": "genie_day_group", "permission_level": "CAN_QUERY" }
   ]
 }'
 ```
@@ -126,7 +123,7 @@ create the resources the workshop needs:
 - **Web Terminal** (Settings → Developer) — for the workspace-only deploy path
 - **Repos / Git folders** — allow Git folder creation + Git credentials
 
-If a "users may create …" setting gates any of these, allow it for `genie-day-workshop`.
+If a "users may create …" setting gates any of these, allow it for `genie_day_group`.
 
 ---
 
