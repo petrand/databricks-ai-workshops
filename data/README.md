@@ -47,11 +47,11 @@ python scripts/generate_structured_data.py --industry retail --catalog CATALOG -
 
 `local_cli_setup_script/*` is a legacy path and remains retail-centric; prefer `scripts/generate_structured_data.py` and notebook flow for multi-industry runs.
 
-## Financial services and Marketplace market data
+## Financial services market data
 
-For `financial_services`, **all workshop tables** (including market data) live in `{catalog}.{schema}` from the setup widgets. The generator does **not** write to the provider `market_data` schema.
+For `financial_services`, **all workshop tables** (including market data) live in `{catalog}.{schema}` from the setup widgets.
 
-Install the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) listing into the **Catalog** widget name (creates read-only `{catalog}.market_data.*`). Setup snapshots `dailyprice` and `company_profile` into `{catalog}.{schema}` once; use the **Schema** widget for your workshop schema (not `market_data`).
+Real market data ships with the repo as static CSVs in `verticals/financial_services/market_data/` (`dailyprice.csv.gz`: 151,702 rows of daily prices for 29 tickers, 1999–2023; `company_profile.csv`: 29 rows). It is a one-time export of the Databricks Marketplace [Sample Market Data - Daily Price Data](https://marketplace.databricks.com/details/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) listing, and setup loads it into `{catalog}.{schema}` automatically — **no Marketplace or Delta Sharing access required** on the target workspace.
 
 Other verticals (`education`, `retail`) use fully synthetic data in `{catalog}.{schema}` only.
 
@@ -71,6 +71,6 @@ Vector Search endpoint names use an industry code pattern: `{industry_code}-vs-{
 
 1. Add `verticals/<industry>/` with `tables.py`, `docs/`, and `workshop.py` (see an existing vertical).
 2. Register it in `verticals/registry.py` (`_REGISTRY` and import).
-3. If the vertical needs external data (like financial services Marketplace share), document setup in `workshop.py` and extend `01_quickstart_setup.py` only for vertical-specific prerequisites.
+3. If the vertical needs real reference data, bundle it as static files in the vertical folder (like `financial_services/market_data/`) so setup has no external dependencies.
 
 UC functions live in each vertical’s `workshop.py` (`udf_sql` / `udf_name`), not in `lib/generate.py`.

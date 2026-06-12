@@ -24,11 +24,11 @@
 # MAGIC |----------|--------|-------------|
 # MAGIC | `education` | 6 tables (students, courses, campuses, …) | EduPath Academy |
 # MAGIC | `retail` | 6 tables (customers, products, stores, …) | FreshMart (`verticals/retail/docs/`) |
-# MAGIC | `financial_services` | 5 tables in `{catalog}.{schema}` | Meridian Capital Partners |
+# MAGIC | `financial_services` | 6 tables (clients, accounts, trades, …) | Meridian Capital Partners |
 # MAGIC
-# MAGIC ### Financial services: Marketplace + workshop schema
+# MAGIC For `financial_services`, real market data (daily prices and company profiles, 29 tickers) ships with the repo as CSVs in `verticals/financial_services/market_data/` and is loaded into `{catalog}.{schema}` automatically — no Marketplace or Delta Sharing access needed.
 # MAGIC
-# MAGIC All tables land in `{catalog}.{schema}` (Catalog + Schema widgets). Install the [Sample Market Data - Daily Price Data](https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b) listing into the **Catalog** widget name (creates read-only `{catalog}.market_data.*`). Setup snapshots `dailyprice` and `company_profile` into your **Schema** widget — do not use `market_data` as the workshop schema.
+# MAGIC > **First run:** the Configuration cell below stops with an error until the widgets are filled in. Fill them, then click **Run All** again — the `%restart_python` above means later cells need the Configuration cell to have run in the same session.
 
 # COMMAND ----------
 
@@ -71,9 +71,15 @@ CATALOG = dbutils.widgets.get("catalog")
 SCHEMA = dbutils.widgets.get("schema")
 
 if not CATALOG:
-    raise ValueError("Please enter a catalog name in the widget at the top of the notebook.")
+    raise ValueError(
+        "Fill the Catalog widget at the top of the notebook, then click Run All again — "
+        "later cells depend on this cell having run (a NameError on FULL_SCHEMA means it hasn't)."
+    )
 if not SCHEMA:
-    raise ValueError("Please enter a schema name in the widget at the top of the notebook.")
+    raise ValueError(
+        "Fill the Schema widget at the top of the notebook, then click Run All again — "
+        "later cells depend on this cell having run (a NameError on FULL_SCHEMA means it hasn't)."
+    )
 
 if INDUSTRY not in INDUSTRIES:
     raise ValueError(f"Unknown industry '{INDUSTRY}'. Expected one of: {', '.join(INDUSTRIES)}")
@@ -84,14 +90,7 @@ print(f"Industry: {INDUSTRY}")
 print(f"Workshop tables: {FULL_SCHEMA}")
 print(f"Planned Vector Search endpoint: {PLANNED_VS_ENDPOINT_NAME}")
 if INDUSTRY == "financial_services":
-    if SCHEMA.lower() == "market_data":
-        raise ValueError(
-            "Schema widget must be your workshop schema (e.g. meridian_demo), not 'market_data'. "
-            "Market data is snapshotted into {catalog}.{schema} at setup."
-        )
-    print(f"Market data install (read-only): {CATALOG}.market_data — snapshotted into {FULL_SCHEMA}")
-    print("Ensure the Marketplace listing is installed into the Catalog widget name.")
-    print("Expected endpoint prefix for this run: fsi-vs-...")
+    print(f"Market data (bundled CSVs in the repo) will be loaded into {FULL_SCHEMA}.")
 
 # COMMAND ----------
 
@@ -121,7 +120,6 @@ workshop = generate_workshop_data(
     schema=SCHEMA,
     spark=spark,
     seed=42,
-    market_data_catalog=CATALOG if INDUSTRY == "financial_services" else None,
 )
 
 tables = workshop.tables

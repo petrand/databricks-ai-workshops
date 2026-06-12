@@ -1,24 +1,28 @@
 """Meridian Capital Partners — financial services tables for workshop demo.
 
 All workshop tables are written to {catalog}.{schema} from 01_quickstart_setup.py widgets.
-The generator never writes to the provider's market_data schema.
 
-First-party data is driven by the real (snapshotted) market data: a simulated
-BUY/SELL trade ledger is generated per account on real trading dates at real
-closing prices, and portfolio holdings, P&L, and cash balances are all derived
-from that ledger — so every number reconciles with `trades` and `dailyprice`.
+Real market data (daily prices and company profiles for 29 tickers, 1999-2023)
+ships with the repo as CSVs in the market_data/ folder — a one-time export of
+the Databricks Marketplace "Sample Market Data - Daily Price Data" listing — so
+setup needs no Delta Sharing or Marketplace access.
+
+First-party data is driven by that real market data: a simulated BUY/SELL trade
+ledger is generated per account on real trading dates at real closing prices,
+and portfolio holdings, P&L, and cash balances are all derived from that
+ledger — so every number reconciles with `trades` and `dailyprice`.
 """
 
+import csv
+import gzip
 import json
 import random
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from lib.demo_names import CITIES_STATES, FIRST_NAMES, LAST_NAMES
 
-# Databricks Marketplace: Sample Market Data - Daily Price Data (Delta Sharing)
-# https://e2-demo-field-eng.cloud.databricks.com/marketplace/consumer/listings/0f7c65e3-875a-40e2-bd58-5c8bcadbdc2b
-# Install into the Catalog widget; read once from {catalog}.market_data, land in {catalog}.{schema}.
-SHARE_SCHEMA = "market_data"
+MARKET_DATA_DIR = Path(__file__).parent / "market_data"
 DAILY_PRICE_TABLE = "dailyprice"
 COMPANY_PROFILE_TABLE = "company_profile"
 
@@ -30,7 +34,7 @@ TABLE_DESCRIPTIONS = {
     "accounts": "Investment account records tied to clients. Cash balance is derived from initial funding and the trades ledger.",
     "trades": "Simulated BUY/SELL trade ledger per account, executed on real trading dates at real closing prices (small slippage). Source of truth for holdings and P&L.",
     "portfolio_holdings": "Position-level holdings derived from the trades ledger: quantity, average cost basis, realized P&L, and mark-to-market value at the latest close.",
-    "dailyprice": "Daily market pricing snapshot for tradable symbols sourced from Marketplace share.",
+    "dailyprice": "Daily market pricing history for tradable symbols (real sample data bundled with the workshop).",
     "company_profile": "Reference company attributes and sector/industry metadata for tradable symbols.",
 }
 
@@ -54,10 +58,6 @@ def _fqn(catalog: str, schema: str, table: str) -> str:
     return f"{catalog}.{schema}.{table}"
 
 
-def _share_fqn(catalog: str, table: str) -> str:
-    return f"`{catalog}`.`{SHARE_SCHEMA}`.`{table}`"
-
-
 def _resolve_catalog_schema(
     full_schema: str,
     catalog: str | None,
@@ -71,18 +71,73 @@ def _resolve_catalog_schema(
     return parts[0], parts[1]
 
 
-def _materialize_market_data_tables(spark, catalog: str, schema: str, share_catalog: str) -> None:
-    """Snapshot share tables into the workshop schema (never write to market_data)."""
-    for table in MARKET_DATA_TABLES:
-        source = _share_fqn(share_catalog, table)
-        target = _fqn(catalog, schema, table)
-        spark.sql(f"CREATE OR REPLACE TABLE {target} AS SELECT * FROM {source}")
-        count = spark.table(target).count()
-        print(f"Created {target} — {count:,} rows (snapshot from Delta Share)")
+# How the CSV export renders NULL/NaN values
+_CSV_NULLS = {"", "null", "NaN", "nan"}
+
+
+def _to_date(value: str):
+    return None if value in _CSV_NULLS else datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _to_float(value: str):
+    return None if value in _CSV_NULLS else float(value)
+
+
+def _to_str(value: str):
+    return None if value in _CSV_NULLS else value
+
+
+def _read_csv_rows(path: Path) -> list[list[str]]:
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt", encoding="utf-8", newline="") as f:
+        reader = csv.reader(f)
+        next(reader)  # header
+        return list(reader)
+
+
+def _load_bundled_market_data(spark, catalog: str, schema: str) -> None:
+    """Load the bundled market-data CSVs into the workshop schema."""
+    dailyprice_path = MARKET_DATA_DIR / "dailyprice.csv.gz"
+    profile_path = MARKET_DATA_DIR / "company_profile.csv"
+    for path in (dailyprice_path, profile_path):
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Bundled market data file missing: {path}. "
+                "It ships with the repo under data/verticals/financial_services/market_data/."
+            )
+
+    daily_rows = [
+        (_to_date(r[0]), *(_to_float(v) for v in r[1:9]), _to_str(r[9]))
+        for r in _read_csv_rows(dailyprice_path)
+    ]
+    daily_schema = (
+        "date DATE, open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, "
+        "adjClose DOUBLE, vol DOUBLE, divAmount DOUBLE, splitFactor DOUBLE, ticker STRING"
+    )
+    target = _fqn(catalog, schema, DAILY_PRICE_TABLE)
+    spark.createDataFrame(daily_rows, schema=daily_schema).write.mode("overwrite").saveAsTable(target)
+    print(f"Created {target} — {len(daily_rows):,} rows (bundled market data CSV)")
+
+    profile_rows = [
+        (
+            _to_str(r[0]), _to_str(r[1]), _to_str(r[2]), _to_str(r[3]), _to_str(r[4]),
+            _to_date(r[5]), _to_str(r[6]), _to_float(r[7]), _to_str(r[8]), _to_str(r[9]),
+            _to_float(r[10]), _to_str(r[11]), _to_str(r[12]),
+        )
+        for r in _read_csv_rows(profile_path)
+    ]
+    profile_schema = (
+        "country STRING, currency STRING, estimateCurrency STRING, exchange STRING, "
+        "industry STRING, ipo DATE, logo STRING, marketCap DOUBLE, companyName STRING, "
+        "phone STRING, sharesOutstanding DOUBLE, ticker STRING, website STRING"
+    )
+    target = _fqn(catalog, schema, COMPANY_PROFILE_TABLE)
+    spark.createDataFrame(profile_rows, schema=profile_schema).write.mode("overwrite").saveAsTable(target)
+    print(f"Created {target} — {len(profile_rows):,} rows (bundled market data CSV)")
 
 
 def _load_price_history(spark, catalog: str, schema: str) -> dict[str, list[tuple[str, float]]]:
-    """Load (date, close) series per ticker from the snapshotted dailyprice table.
+    """Load (date, close) series per ticker from the loaded dailyprice table.
 
     Limits to the most-traded UNIVERSE_SIZE tickers (always including NEWS_TICKERS)
     so the simulation works on a manageable, liquid universe.
@@ -102,7 +157,8 @@ def _load_price_history(spark, catalog: str, schema: str) -> dict[str, list[tupl
     if not counts:
         raise ValueError(
             f"No tickers with enough history in {daily}. "
-            "Install the Marketplace listing into the Catalog widget, then re-run setup."
+            "The bundled CSV at data/verticals/financial_services/market_data/dailyprice.csv.gz "
+            "may be missing or corrupt — re-sync the repo and re-run setup."
         )
     symbols = [r["ticker"] for r in counts]
     universe = [t for t in NEWS_TICKERS if t in symbols]
@@ -294,15 +350,13 @@ def generate(
     seed: int = 42,
     catalog: str | None = None,
     schema: str | None = None,
-    market_data_catalog: str | None = None,
 ) -> list[str]:
     catalog, schema = _resolve_catalog_schema(full_schema, catalog, schema)
-    share_catalog = market_data_catalog or catalog
     random.seed(seed)
     rng = random.Random(seed + 1)
 
-    # Land 3rd-party market data in the target schema first (read share, write workshop schema only).
-    _materialize_market_data_tables(spark, catalog, schema, share_catalog)
+    # Land the bundled 3rd-party market data in the target schema first.
+    _load_bundled_market_data(spark, catalog, schema)
     prices = _load_price_history(spark, catalog, schema)
     universe = sorted(prices)
     shocks = _shock_days(prices)

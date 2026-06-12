@@ -663,7 +663,7 @@ Guidelines:
 
 ### A.3 Financial Services — Meridian Capital Partners
 
-> **How the Meridian data fits together:** the `trades` table is a simulated buy/sell ledger executed on real trading dates at real closing prices (from the snapshotted Marketplace `dailyprice`). `portfolio_holdings` (quantity, average cost, realized/unrealized P&L) and account cash balances are **derived from that ledger**, so exposure questions, trade-history questions, and price questions all reconcile. Clients also react to real market shocks — risk-averse clients sell after big drops, risk-seeking ones buy the dip — which is what makes the multi-tool questions below interesting.
+> **How the Meridian data fits together:** the `trades` table is a simulated buy/sell ledger executed on real trading dates at real closing prices (from the real price history bundled with the repo and loaded as `dailyprice`). `portfolio_holdings` (quantity, average cost, realized/unrealized P&L) and account cash balances are **derived from that ledger**, so exposure questions, trade-history questions, and price questions all reconcile. Clients also react to real market shocks — risk-averse clients sell after big drops, risk-seeking ones buy the dip — which is what makes the multi-tool questions below interesting.
 
 **Playground system prompt:**
 ```

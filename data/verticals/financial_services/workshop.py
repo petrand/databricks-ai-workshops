@@ -37,12 +37,11 @@ RETURN (
 def _generate_extra_kwargs(
     catalog: str,
     schema: str,
-    market_data_catalog: str | None,
+    market_data_catalog: str | None,  # unused — market data is bundled with the repo
 ) -> dict[str, str]:
     return {
         "catalog": catalog,
         "schema": schema,
-        "market_data_catalog": market_data_catalog or catalog,
     }
 
 
