@@ -41,9 +41,8 @@ NAME = 'my-agent'
 SYSTEM_PROMPT = 'You are a helpful assistant.'
 MODEL = 'databricks-claude-opus-4-6'
 MCP_SERVERS = [
-    # Add your MCP servers here, e.g.:
-    # ('Vector Search: <catalog>.<schema>.<index>', '/api/2.0/mcp/vector-search/<catalog>/<schema>/<index>'),
-    # ('Genie Space: <name>', '/api/2.0/mcp/genie/<space-id>'),
+    ('Policy Document Search', '/api/2.0/mcp/vector-search/vicinity_genie_day/nonadmin_l200/policy_docs_index'),
+    ('Data Query Assistant', '/api/2.0/mcp/genie/01f1655468a5169094c0dedcb8f00372'),
 ]
 
 # END GENERATED

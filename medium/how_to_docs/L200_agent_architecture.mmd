@@ -1,0 +1,68 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#eff4ff",
+    "primaryTextColor": "#0b1c30",
+    "primaryBorderColor": "#0b1c30",
+    "lineColor": "#0b1c30",
+    "secondaryColor": "#f8f9ff",
+    "tertiaryColor": "#fde8e5",
+    "edgeLabelBackground": "#ffffff",
+    "fontFamily": "Helvetica, Arial, sans-serif",
+    "fontSize": "15px"
+  }
+}}%%
+flowchart LR
+    USER(["👤 User"])
+
+    UI["Next.js\nChat UI"]
+
+    APP["Databricks App\n(Service Principal)\nFastAPI backend"]
+
+    LOOP["⚙ Agent Loop\n(OpenAI Agents SDK)\nreason → pick tool → observe → answer"]
+
+    GW["AI Gateway\nFoundation Model API\n(Claude)"]
+
+    MEM[("Lakebase (Postgres)\nConversation Memory")]
+
+    MLF["MLflow\nTracing & Evaluation"]
+
+    subgraph MCP_TOOLS["MCP Tools"]
+        direction TB
+        VS["Vector Search Index\n(Document / RAG search)"]
+        GN["Genie Space\n(NL → SQL over tables)"]
+    end
+
+    UC["Unity Catalog\nGovernance · Lineage · Access Control"]
+
+    USER -->|"chat"| UI
+    UI -->|"API calls"| APP
+    APP --> LOOP
+    LOOP -->|"LLM calls"| GW
+    LOOP -->|"MCP protocol"| VS
+    LOOP -->|"MCP protocol"| GN
+    LOOP <-->|"read / write memory"| MEM
+    MLF -.->|"observes"| LOOP
+    UC -.-> VS
+    UC -.-> GN
+    UC -.-> MEM
+
+    classDef user        fill:#f8f9ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30,font-weight:bold
+    classDef ui          fill:#eff4ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30
+    classDef app         fill:#eff4ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30
+    classDef loop        fill:#fb331e,stroke:#0b1c30,stroke-width:3px,color:#ffffff,font-weight:bold
+    classDef llm         fill:#fde8e5,stroke:#fb331e,stroke-width:2px,color:#0b1c30
+    classDef memory      fill:#eff4ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30
+    classDef mlflow      fill:#f8f9ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30,stroke-dasharray:5 4
+    classDef mcptool     fill:#fde8e5,stroke:#fb331e,stroke-width:2px,color:#0b1c30
+    classDef uc          fill:#0b1c30,stroke:#0b1c30,stroke-width:2px,color:#ffffff,font-weight:bold
+
+    class USER user
+    class UI ui
+    class APP app
+    class LOOP loop
+    class GW llm
+    class MEM memory
+    class MLF mlflow
+    class VS,GN mcptool
+    class UC uc

@@ -12,7 +12,7 @@ sync:
 resources:
   apps:
     agent_openai_agents_sdk:
-      name: "my-agent-app"
+      name: "agent-nonadmin-l200"
       description: "OpenAI Agents SDK agent application"
       source_code_path: ./
       config:
@@ -30,8 +30,8 @@ resources:
             value: "300"
           - name: MLFLOW_EXPERIMENT_ID
             value_from: "experiment"
-          - name: LAKEBASE_AUTOSCALING_ENDPOINT
-            value_from: "postgres"
+          - name: LAKEBASE_INSTANCE_NAME
+            value: "nonadmin-l200"
           - name: LAKEBASE_AGENT_MEMORY_SCHEMA
             value: "agent_openai_memory"
           - name: PGDATABASE
@@ -43,26 +43,26 @@ resources:
       resources:
         - name: 'experiment'
           experiment:
-            experiment_id: "<your-experiment-id>"
+            experiment_id: "4011198291053259"
             permission: 'CAN_MANAGE'
-        - name: 'postgres'
-          postgres:
-            branch: "projects/<your-project>/branches/production"
-            database: "projects/<your-project>/branches/production/databases/databricks-postgres"
-            permission: 'CAN_CONNECT_AND_CREATE'
+        - name: 'database'
+          database:
+            database_name: databricks_postgres
+            instance_name: 'nonadmin-l200'
+            permission: CAN_CONNECT_AND_CREATE
 
 targets:
   dev:
     mode: development
     default: true
     workspace:
-      host: https://<your-workspace>.cloud.databricks.com
+      host: https://dbc-22969be4-7a92.cloud.databricks.com
 
   prod:
     mode: production
     workspace:
-      host: https://<your-workspace>.cloud.databricks.com
+      host: https://dbc-22969be4-7a92.cloud.databricks.com
     resources:
       apps:
         agent_openai_agents_sdk:
-          name: my-agent-app
+          name: agent-nonadmin-l200
