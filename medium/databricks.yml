@@ -45,6 +45,11 @@ resources:
           experiment:
             experiment_id: "4011198291053259"
             permission: 'CAN_MANAGE'
+        - name: 'policy_docs_index'
+          uc_securable:
+            securable_full_name: 'dev.policies.policy_docs_index'
+            securable_type: 'TABLE'
+            permission: 'SELECT'
         - name: 'database'
           database:
             database_name: databricks_postgres

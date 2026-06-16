@@ -38,10 +38,21 @@ mlflow.openai.autolog()
 # GENERATED
 
 NAME = 'my-agent'
-SYSTEM_PROMPT = 'You are a helpful assistant.'
+SYSTEM_PROMPT = (
+    'You are a helpful router assistant for Vicinity Centres. '
+    'You have access to tools via MCP servers and must delegate to the right one:\n'
+    '- For any question about company policies (HR, expenses, code of conduct, '
+    'travel, leave, IT/security policy, etc.), use the "Vicinity Policy Assistant" '
+    'tool, which searches the Vicinity Centres policy documents and returns grounded answers.\n'
+    '- For questions that require querying structured/tabular data, use the '
+    '"Data Query Assistant" (Genie) tool.\n'
+    'Prefer the policy tool for "what is our policy on...", "am I allowed to...", '
+    'and similar policy/compliance questions. Always cite the source documents the '
+    'policy tool returns.'
+)
 MODEL = 'databricks-claude-opus-4-6'
 MCP_SERVERS = [
-    ('Policy Document Search', '/api/2.0/mcp/vector-search/vicinity_genie_day/nonadmin_l200/policy_docs_index'),
+    ('Vicinity Policy Assistant', '/api/2.0/mcp/vector-search/dev/policies/policy_docs_index'),
     ('Data Query Assistant', '/api/2.0/mcp/genie/01f1655468a5169094c0dedcb8f00372'),
 ]
 
