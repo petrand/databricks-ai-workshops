@@ -58,8 +58,12 @@ export type DBMessage = InferSelectModel<typeof message>;
 export const vote = createTable(
   'Vote',
   {
-    chatId: uuid('chatId').notNull().references(() => chat.id),
-    messageId: uuid('messageId').notNull().references(() => message.id),
+    chatId: uuid('chatId')
+      .notNull()
+      .references(() => chat.id),
+    messageId: uuid('messageId')
+      .notNull()
+      .references(() => message.id),
     isUpvoted: boolean('isUpvoted').notNull(),
   },
   (table) => ({
@@ -68,3 +72,19 @@ export const vote = createTable(
 );
 
 export type Vote = InferSelectModel<typeof vote>;
+
+// Policy review decisions captured from the Policy Compliance dashboard.
+// This is the transactional audit log in Lakebase; the latest decision is also
+// written back to the Delta policy table for analytics.
+export const policyReview = createTable('PolicyReview', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  policyId: text('policyId').notNull(),
+  decision: varchar('decision', {
+    enum: ['approved', 'changes_requested'],
+  }).notNull(),
+  comment: text('comment'),
+  reviewer: text('reviewer').notNull(),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type PolicyReview = InferSelectModel<typeof policyReview>;

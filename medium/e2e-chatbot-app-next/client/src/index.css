@@ -164,7 +164,7 @@
   --ring: #2272b4;
 
   /* Semantic additions */
-  --warning: var(--color-yellow-600);
+  --warning: #eab308;
   --success: var(--color-green-600);
 
   /* Alert / validation tinted borders and backgrounds */
@@ -229,7 +229,7 @@
   --input: #2a3a45;
   --ring: #4ba3d6;
 
-  --warning: #dc6222;
+  --warning: #facc15;
   --success: #3ca45e;
 
   /* Alert / validation tinted borders and backgrounds */

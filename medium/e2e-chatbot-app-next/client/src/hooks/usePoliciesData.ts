@@ -14,7 +14,13 @@ export interface PolicyRow {
   daysOverdue: number;
   ageDays: number;
   status: PolicyStatus;
+  reviewStatus: string | null;
+  reviewComment: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
 }
+
+export type ReviewDecision = 'approved' | 'changes_requested';
 
 export interface CategoryRow {
   category: string;
@@ -71,4 +77,48 @@ export function usePoliciesData() {
     isLoading,
     refresh: mutate,
   };
+}
+
+/** Fetch the full Markdown content for a single policy on demand. */
+export async function fetchPolicyContent(
+  policyId: string,
+): Promise<{ policyId: string; content: string }> {
+  const response = await fetch(
+    `/api/policies/content/${encodeURIComponent(policyId)}`,
+  );
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      if (body?.message) message = body.message;
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+/** Submit a review decision; persists to Lakebase and writes back to Delta. */
+export async function submitPolicyReview(input: {
+  policyId: string;
+  decision: ReviewDecision;
+  comment: string;
+}): Promise<{ persistedTo: string[]; deltaError: string | null }> {
+  const response = await fetch('/api/policies/review', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      if (body?.message) message = body.message;
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+  return response.json();
 }

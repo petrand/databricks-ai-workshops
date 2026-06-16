@@ -6,6 +6,7 @@ import {
 } from 'express';
 import { getDatabricksToken, getCachedCliHost } from '@chat-template/auth';
 import { getHostUrl } from '@chat-template/utils';
+import { savePolicyReview } from '@chat-template/db';
 
 export const policiesRouter: RouterType = Router();
 
@@ -33,6 +34,10 @@ interface PolicyRow {
   daysOverdue: number; // >0 means past its review date
   ageDays: number; // days since effective date
   status: 'Overdue' | 'Due soon' | 'Current';
+  reviewStatus: string | null; // 'Approved' | 'Changes requested' | null
+  reviewComment: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
 }
 
 /** Resolve the workspace base URL, preferring an explicit host then the CLI cache. */
@@ -152,7 +157,11 @@ policiesRouter.get(
             WHEN review_date < current_date() THEN 'Overdue'
             WHEN review_date <= DATE_ADD(current_date(), ${DUE_SOON_DAYS}) THEN 'Due soon'
             ELSE 'Current'
-          END AS status
+          END AS status,
+          review_status,
+          review_comment,
+          reviewed_by,
+          CAST(reviewed_at AS STRING) AS reviewed_at
         FROM ${POLICIES_TABLE}
         ORDER BY days_overdue DESC, review_date ASC
       `);
@@ -169,6 +178,10 @@ policiesRouter.get(
         daysOverdue: toInt(r.days_overdue),
         ageDays: toInt(r.age_days),
         status: (r.status as PolicyRow['status']) ?? 'Current',
+        reviewStatus: r.review_status,
+        reviewComment: r.review_comment,
+        reviewedBy: r.reviewed_by,
+        reviewedAt: r.reviewed_at,
       }));
 
       const total = policies.length;
@@ -233,6 +246,144 @@ policiesRouter.get(
       console.error('[/api/policies/compliance] Error:', error);
       res.status(500).json({
         error: 'policies_query_failed',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+);
+
+/**
+ * GET /api/policies/content/:policyId
+ * Returns the full Markdown content (and key metadata) for a single policy,
+ * fetched on demand when a reviewer opens a policy.
+ */
+policiesRouter.get(
+  '/content/:policyId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const policyId = String(req.params.policyId ?? '');
+      const rows = await runSql(`
+        SELECT policy_id, title, category, owner, version, content
+        FROM ${POLICIES_TABLE}
+        WHERE policy_id = ${sqlString(policyId)}
+        LIMIT 1
+      `);
+      if (!rows.length) {
+        res
+          .status(404)
+          .json({
+            error: 'not_found',
+            message: `Policy ${policyId} not found`,
+          });
+        return;
+      }
+      const r = rows[0];
+      res.json({
+        policyId: r.policy_id,
+        title: r.title,
+        category: r.category,
+        owner: r.owner,
+        version: r.version,
+        content: r.content ?? '',
+      });
+    } catch (error) {
+      console.error('[/api/policies/content] Error:', error);
+      res.status(500).json({
+        error: 'policy_content_failed',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+);
+
+/** Render a value as a safe SQL string literal (single quotes doubled), or NULL. */
+function sqlString(v: string | null): string {
+  if (v === null || v === undefined) return 'NULL';
+  return `'${v.replace(/'/g, "''")}'`;
+}
+
+/**
+ * POST /api/policies/review
+ * Records a review decision (approved | changes_requested + optional comment):
+ *  1. writes the decision to Lakebase (transactional audit log), then
+ *  2. writes the latest decision back to the Delta policy table.
+ */
+policiesRouter.post(
+  '/review',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { policyId, decision, comment } = (req.body ?? {}) as {
+        policyId?: string;
+        decision?: string;
+        comment?: string;
+      };
+
+      if (typeof policyId !== 'string' || !policyId) {
+        res
+          .status(400)
+          .json({ error: 'invalid_request', message: 'policyId is required' });
+        return;
+      }
+      if (decision !== 'approved' && decision !== 'changes_requested') {
+        res.status(400).json({
+          error: 'invalid_request',
+          message: "decision must be 'approved' or 'changes_requested'",
+        });
+        return;
+      }
+
+      const commentStr =
+        typeof comment === 'string' && comment.trim() ? comment.trim() : null;
+      const reviewer =
+        (req.headers['x-forwarded-email'] as string) ||
+        (req.headers['x-forwarded-preferred-username'] as string) ||
+        (req.headers['x-forwarded-user'] as string) ||
+        'app-user';
+
+      // 1) Persist to Lakebase (transactional audit log).
+      const saved = await savePolicyReview({
+        policyId,
+        decision,
+        comment: commentStr,
+        reviewer,
+      });
+
+      // 2) Write the latest decision back to the Delta policy table.
+      const reviewStatus =
+        decision === 'approved' ? 'Approved' : 'Changes requested';
+      let deltaError: string | null = null;
+      try {
+        await runSql(`
+          UPDATE ${POLICIES_TABLE}
+          SET review_status  = ${sqlString(reviewStatus)},
+              review_comment = ${sqlString(commentStr)},
+              reviewed_by    = ${sqlString(reviewer)},
+              reviewed_at    = current_timestamp()
+          WHERE policy_id = ${sqlString(policyId)}
+        `);
+      } catch (e) {
+        deltaError = e instanceof Error ? e.message : String(e);
+        console.error('[/api/policies/review] Delta write-back failed:', e);
+      }
+
+      res.json({
+        ok: true,
+        review: {
+          id: saved.id,
+          policyId,
+          decision,
+          reviewStatus,
+          comment: commentStr,
+          reviewer,
+          createdAt: saved.createdAt,
+        },
+        persistedTo: deltaError ? ['lakebase'] : ['lakebase', 'delta'],
+        deltaError,
+      });
+    } catch (error) {
+      console.error('[/api/policies/review] Error:', error);
+      res.status(500).json({
+        error: 'policy_review_failed',
         message: error instanceof Error ? error.message : String(error),
       });
     }

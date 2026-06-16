@@ -17,9 +17,11 @@ import {
   chat,
   message,
   vote,
+  policyReview,
   type DBMessage,
   type Chat,
   type Vote,
+  type PolicyReview,
 } from './schema';
 import type { VisibilityType } from '@chat-template/utils';
 import { ChatSDKError } from '@chat-template/core/errors';
@@ -412,7 +414,6 @@ export async function updateChatVisiblityById({
   }
 }
 
-
 export async function updateChatTitleById({
   chatId,
   title,
@@ -421,7 +422,9 @@ export async function updateChatTitleById({
   title: string;
 }) {
   if (!isDatabaseAvailable()) {
-    console.log('[updateChatTitleById] Database not available, skipping update');
+    console.log(
+      '[updateChatTitleById] Database not available, skipping update',
+    );
     return;
   }
 
@@ -487,11 +490,38 @@ export async function voteMessage({
     });
 }
 
-export async function getVotesByChatId({ id }: { id: string }): Promise<Vote[]> {
+export async function getVotesByChatId({
+  id,
+}: { id: string }): Promise<Vote[]> {
   if (!isDatabaseAvailable()) {
     return [];
   }
 
   const db = await ensureDb();
   return db.select().from(vote).where(eq(vote.chatId, id));
+}
+
+export async function savePolicyReview({
+  policyId,
+  decision,
+  comment,
+  reviewer,
+}: {
+  policyId: string;
+  decision: 'approved' | 'changes_requested';
+  comment: string | null;
+  reviewer: string;
+}): Promise<PolicyReview> {
+  if (!isDatabaseAvailable()) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Database not available for policy reviews',
+    );
+  }
+
+  const [row] = await (await ensureDb())
+    .insert(policyReview)
+    .values({ policyId, decision, comment, reviewer, createdAt: new Date() })
+    .returning();
+  return row;
 }
