@@ -3484,3 +3484,119 @@ results = idx.similarity_search(
 )
 for row in results.get("result", {}).get("data_array", []):
     print(row)
+
+# COMMAND ----------
+
+# MAGIC %md ## 8. Knowledge Assistant (Agent Bricks, optional)
+# MAGIC
+# MAGIC Builds an **Agent Bricks Knowledge Assistant** chatbot over the policy Vector Search index.
+# MAGIC It produces a serving endpoint you can query (and chat with in AI Playground). Requires the
+# MAGIC index to use a supported embedding model (`databricks-gte-large-en` does qualify).
+# MAGIC
+# MAGIC > **Important:** a knowledge source\'s display name becomes the agent\'s retrieval tool name,
+# MAGIC > which must match `^[a-zA-Z0-9_-]{1,128}$`. **No spaces or punctuation** — a name like
+# MAGIC > "Company Policies" makes every search fail with a 400 and the assistant returns no results.
+# MAGIC > Use `company_policies` (underscores), as below.
+
+# COMMAND ----------
+
+# MAGIC %pip install -q --upgrade databricks-sdk
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+dbutils.widgets.text("ka_name", "Vicinity Policy Assistant", "Knowledge Assistant display name")
+
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+TABLE = dbutils.widgets.get("table")
+VS_INDEX_NAME = f"{CATALOG}.{SCHEMA}.{TABLE}_index"
+KA_DISPLAY_NAME = dbutils.widgets.get("ka_name")
+SOURCE_NAME = "company_policies"   # MUST match ^[a-zA-Z0-9_-]{1,128}$ (no spaces!)
+
+INSTRUCTIONS = (
+    "You are the Vicinity Centres company policy assistant. Answer questions strictly using the "
+    "provided policy documents. Always cite the specific policy you relied on, including its title "
+    "and policy ID (e.g., POL-009 Tenant Arrears Management Policy). If the policies do not cover "
+    "the question, say so clearly and suggest contacting the relevant team. Be concise and accurate, "
+    "and never invent policy details or obligations."
+)
+
+# COMMAND ----------
+
+# MAGIC %md ### Create the assistant and attach the index as a knowledge source
+
+# COMMAND ----------
+
+import time
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.knowledgeassistants import KnowledgeAssistant, KnowledgeSource, IndexSpec
+
+w = WorkspaceClient()
+
+# Reuse an existing assistant with the same display name, else create one
+existing = [k for k in w.knowledge_assistants.list_knowledge_assistants()
+            if k.display_name == KA_DISPLAY_NAME]
+if existing:
+    ka = existing[0]
+    print(f"Reusing Knowledge Assistant: {ka.name}")
+else:
+    ka = w.knowledge_assistants.create_knowledge_assistant(
+        knowledge_assistant=KnowledgeAssistant(
+            display_name=KA_DISPLAY_NAME,
+            description=("Answers questions about Vicinity Centres' retail property management "
+                         "policies (leasing, operations, WHS, security, finance, compliance, "
+                         "sustainability, HR, and more)."),
+            instructions=INSTRUCTIONS,
+        )
+    )
+    print(f"Created Knowledge Assistant: {ka.name}")
+
+# Attach the Vector Search index as a knowledge source (idempotent on the compliant name)
+sources = list(w.knowledge_assistants.list_knowledge_sources(ka.name))
+if not any(s.display_name == SOURCE_NAME for s in sources):
+    w.knowledge_assistants.create_knowledge_source(
+        parent=ka.name,
+        knowledge_source=KnowledgeSource(
+            display_name=SOURCE_NAME,
+            description="Vicinity Centres company policy documents (100 policies).",
+            source_type="index",
+            index=IndexSpec(index_name=VS_INDEX_NAME, text_col="content", doc_uri_col="policy_id"),
+        ),
+    )
+    print(f"Attached knowledge source: {SOURCE_NAME} -> {VS_INDEX_NAME}")
+
+w.knowledge_assistants.sync_knowledge_sources(name=ka.name)
+print("Sync triggered.")
+
+# COMMAND ----------
+
+# MAGIC %md ### Wait until ACTIVE, then chat with the assistant
+
+# COMMAND ----------
+
+for _ in range(60):
+    ka = w.knowledge_assistants.get_knowledge_assistant(ka.name)
+    state = ka.state.value if ka.state else None
+    if state == "ACTIVE":
+        break
+    time.sleep(10)
+print(f"Knowledge Assistant state: {state} | serving endpoint: {ka.endpoint_name}")
+
+# COMMAND ----------
+
+# Query the assistant endpoint (Agent Bricks uses the ResponsesAgent `input` schema)
+resp = w.api_client.do(
+    "POST",
+    f"/serving-endpoints/{ka.endpoint_name}/invocations",
+    body={"input": [{"role": "user",
+                     "content": "A tenant is 45 days behind on rent. What is the arrears process "
+                                "and can we draw on their bank guarantee? Cite the policy."}]},
+)
+answer = "".join(
+    seg.get("text", "")
+    for item in resp.get("output", [])
+    for seg in (item.get("content") or [])
+    if isinstance(item.get("content"), list)
+)
+print(answer or resp)
