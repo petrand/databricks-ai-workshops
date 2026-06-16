@@ -3368,3 +3368,119 @@ display(spark.sql(f"""
 
 sample = spark.sql(f"SELECT content FROM {FQN} WHERE policy_id = 'POL-001'").collect()[0][0]
 print(sample)
+
+# COMMAND ----------
+
+# MAGIC %md ## 7. Vector Search endpoint & embeddings (optional)
+# MAGIC
+# MAGIC Creates a Vector Search endpoint and a **Delta Sync index** over the policies. Databricks
+# MAGIC generates embeddings automatically with the `databricks-gte-large-en` foundation model
+# MAGIC (one embedding per policy on the `content` column). Requires Change Data Feed on the source
+# MAGIC table (enabled below) and serverless compute / a Vector Search-enabled workspace.
+
+# COMMAND ----------
+
+# MAGIC %pip install -q databricks-vectorsearch
+# MAGIC dbutils.library.restartPython()
+
+# COMMAND ----------
+
+dbutils.widgets.text("vs_endpoint", "vicinity-policies-vs", "Vector Search endpoint")
+dbutils.widgets.text("embedding_model", "databricks-gte-large-en", "Embedding model endpoint")
+
+# re-read widgets after restartPython
+CATALOG = dbutils.widgets.get("catalog")
+SCHEMA = dbutils.widgets.get("schema")
+TABLE = dbutils.widgets.get("table")
+FQN = f"{CATALOG}.{SCHEMA}.{TABLE}"
+VS_ENDPOINT_NAME = dbutils.widgets.get("vs_endpoint")
+EMBEDDING_MODEL = dbutils.widgets.get("embedding_model")
+VS_INDEX_NAME = f"{CATALOG}.{SCHEMA}.{TABLE}_index"
+
+# COMMAND ----------
+
+# MAGIC %md ### Create (or reuse) the endpoint
+
+# COMMAND ----------
+
+import time
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.vectorsearch import EndpointType
+
+w = WorkspaceClient()
+
+try:
+    ep = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME)
+    print(f"Endpoint '{VS_ENDPOINT_NAME}' exists (status: {ep.endpoint_status.state.value})")
+except Exception:
+    print(f"Creating Vector Search endpoint '{VS_ENDPOINT_NAME}'...")
+    w.vector_search_endpoints.create_endpoint(
+        name=VS_ENDPOINT_NAME, endpoint_type=EndpointType.STANDARD)
+
+# Wait until ONLINE (provisioning can take 5-10 minutes)
+for attempt in range(60):
+    status = w.vector_search_endpoints.get_endpoint(VS_ENDPOINT_NAME).endpoint_status.state.value
+    if status == "ONLINE":
+        break
+    if attempt % 6 == 0:
+        print(f"  waiting for endpoint to be ONLINE (currently: {status})...")
+    time.sleep(10)
+print(f"Endpoint '{VS_ENDPOINT_NAME}' status: {status}")
+
+# COMMAND ----------
+
+# MAGIC %md ### Enable Change Data Feed and create the Delta Sync index
+
+# COMMAND ----------
+
+spark.sql(f"ALTER TABLE {FQN} SET TBLPROPERTIES (delta.enableChangeDataFeed = true)")
+
+# COMMAND ----------
+
+from databricks.vector_search.client import VectorSearchClient
+
+client = VectorSearchClient(disable_notice=True)
+
+# Recreate the index if it already exists
+try:
+    client.delete_index(endpoint_name=VS_ENDPOINT_NAME, index_name=VS_INDEX_NAME)
+    print(f"Deleted existing index: {VS_INDEX_NAME}")
+except Exception as e:
+    print(f"No existing index to delete ({e})")
+
+index = client.create_delta_sync_index(
+    endpoint_name=VS_ENDPOINT_NAME,
+    source_table_name=FQN,
+    index_name=VS_INDEX_NAME,
+    pipeline_type="TRIGGERED",
+    primary_key="policy_id",
+    embedding_source_column="content",
+    embedding_model_endpoint_name=EMBEDDING_MODEL,
+)
+print(f"Index '{VS_INDEX_NAME}' created; embeddings are syncing.")
+
+# COMMAND ----------
+
+# MAGIC %md ### Wait for the initial sync, then test a similarity search
+
+# COMMAND ----------
+
+idx = client.get_index(endpoint_name=VS_ENDPOINT_NAME, index_name=VS_INDEX_NAME)
+for attempt in range(60):
+    st = idx.describe().get("status", {})
+    if st.get("ready"):
+        print(f"Index READY | indexed rows: {st.get('indexed_row_count')}")
+        break
+    if attempt % 4 == 0:
+        print(f"  syncing... state={st.get('detailed_state')} indexed={st.get('indexed_row_count', 0)}")
+    time.sleep(15)
+
+# COMMAND ----------
+
+results = idx.similarity_search(
+    query_text="What are my obligations if a tenant falls behind on rent?",
+    columns=["policy_id", "title", "category"],
+    num_results=5,
+)
+for row in results.get("result", {}).get("data_array", []):
+    print(row)
