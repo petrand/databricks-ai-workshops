@@ -58,6 +58,12 @@ resources:
             securable_full_name: ${var.policies_table}
             securable_type: TABLE
             permission: SELECT
+        - name: policy-table-write
+          description: "Write access so the app can record reviews, edit policy text, and add uploaded policies"
+          uc_securable:
+            securable_full_name: ${var.policies_table}
+            securable_type: TABLE
+            permission: MODIFY
         # NOTE: app resources cannot express USE CATALOG / USE SCHEMA (uc_securable only
         # supports TABLE/VOLUME/FUNCTION/CONNECTION). The dashboard also needs the app's
         # service principal to have USE on the catalog and schema. Grant once per workspace:

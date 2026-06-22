@@ -49,7 +49,7 @@ export interface PolicyComplianceData {
 }
 
 /** Fetch that surfaces the server's error message (e.g. warehouse not set). */
-async function policiesFetcher(url: string): Promise<PolicyComplianceData> {
+async function jsonFetcher<T>(url: string): Promise<T> {
   const response = await fetch(url);
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
@@ -67,7 +67,7 @@ async function policiesFetcher(url: string): Promise<PolicyComplianceData> {
 export function usePoliciesData() {
   const { data, error, isLoading, mutate } = useSWR<PolicyComplianceData>(
     '/api/policies/compliance',
-    policiesFetcher,
+    jsonFetcher<PolicyComplianceData>,
     { revalidateOnFocus: false },
   );
 
@@ -86,6 +86,110 @@ export async function fetchPolicyContent(
   const response = await fetch(
     `/api/policies/content/${encodeURIComponent(policyId)}`,
   );
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      if (body?.message) message = body.message;
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+/** Update the Markdown content of an existing policy. */
+export async function updatePolicyContent(
+  policyId: string,
+  content: string,
+): Promise<{
+  ok: boolean;
+  policyId: string;
+  syncedVia: 'lakebase-cdf' | 'delta';
+}> {
+  const response = await fetch(
+    `/api/policies/content/${encodeURIComponent(policyId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    },
+  );
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      if (body?.message) message = body.message;
+    } catch {
+      // ignore
+    }
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+export interface UploadPolicyInput {
+  title: string;
+  docName?: string;
+  category?: string;
+  owner?: string;
+  version?: string;
+  effectiveDate?: string;
+  reviewDate?: string;
+  content: string;
+  sourceFilename?: string;
+}
+
+export interface UploadedPolicy {
+  id: string;
+  policyId: string;
+  docName: string;
+  category: string | null;
+  title: string;
+  owner: string | null;
+  version: string | null;
+  effectiveDate: string | null;
+  reviewDate: string | null;
+  content: string;
+  sourceFilename: string | null;
+  uploadedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** List policies uploaded through the app (the Lakebase intermediate table). */
+export function useUploads() {
+  const { data, error, isLoading, mutate } = useSWR<{
+    uploads: UploadedPolicy[];
+  }>('/api/policies/uploads', jsonFetcher<{ uploads: UploadedPolicy[] }>, {
+    revalidateOnFocus: false,
+  });
+  return {
+    uploads: data?.uploads ?? [],
+    error: error as Error | undefined,
+    isLoading,
+    refresh: mutate,
+  };
+}
+
+/** Add a new policy (from an uploaded document) to the policy table. */
+export async function uploadPolicy(input: UploadPolicyInput): Promise<{
+  ok: boolean;
+  policy: {
+    policyId: string;
+    docName: string;
+    category: string;
+    title: string;
+    owner: string | null;
+    version: string;
+  };
+}> {
+  const response = await fetch('/api/policies/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
     try {

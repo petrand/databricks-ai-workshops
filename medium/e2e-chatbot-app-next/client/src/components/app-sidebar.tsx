@@ -21,6 +21,7 @@ import {
 import { DbIcon } from '@/components/ui/db-icon';
 import {
   ChecklistIcon,
+  CloudUploadIcon,
   NewChatIcon,
   SidebarCollapseIcon,
   SidebarExpandIcon,
@@ -125,6 +126,31 @@ export function AppSidebar({
                 style={{ display: open ? 'none' : 'block' }}
               >
                 Policies
+              </TooltipContent>
+            </Tooltip>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SidebarMenuButton
+                  type="button"
+                  className="h-8 cursor-pointer p-1 md:p-2"
+                  onClick={() => {
+                    setOpenMobile(false);
+                    navigate('/upload');
+                  }}
+                >
+                  <DbIcon icon={CloudUploadIcon} size={16} color="default" />
+                  <span className="group-data-[collapsible=icon]:hidden">
+                    Add policy
+                  </span>
+                </SidebarMenuButton>
+              </TooltipTrigger>
+              <TooltipContent
+                side="right"
+                style={{ display: open ? 'none' : 'block' }}
+              >
+                Add policy
               </TooltipContent>
             </Tooltip>
           </SidebarMenuItem>

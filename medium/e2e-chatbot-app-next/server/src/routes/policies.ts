@@ -6,7 +6,12 @@ import {
 } from 'express';
 import { getDatabricksToken, getCachedCliHost } from '@chat-template/auth';
 import { getHostUrl } from '@chat-template/utils';
-import { savePolicyReview } from '@chat-template/db';
+import {
+  savePolicyReview,
+  savePolicyUpload,
+  listPolicyUploads,
+  updatePolicyUploadContent,
+} from '@chat-template/db';
 
 export const policiesRouter: RouterType = Router();
 
@@ -19,6 +24,8 @@ const WAREHOUSE_ID =
   '';
 // A policy is "due soon" if its review date falls within this many days.
 const DUE_SOON_DAYS = 90;
+// Approving a policy resets its review clock by this many months (annual cycle).
+const REVIEW_CYCLE_MONTHS = 12;
 
 type Row = Record<string, string | null>;
 
@@ -269,12 +276,10 @@ policiesRouter.get(
         LIMIT 1
       `);
       if (!rows.length) {
-        res
-          .status(404)
-          .json({
-            error: 'not_found',
-            message: `Policy ${policyId} not found`,
-          });
+        res.status(404).json({
+          error: 'not_found',
+          message: `Policy ${policyId} not found`,
+        });
         return;
       }
       const r = rows[0];
@@ -301,6 +306,202 @@ function sqlString(v: string | null): string {
   if (v === null || v === undefined) return 'NULL';
   return `'${v.replace(/'/g, "''")}'`;
 }
+
+/** Best-effort signed-in user, from the reverse-proxy headers. */
+function requestUser(req: Request): string {
+  return (
+    (req.headers['x-forwarded-email'] as string) ||
+    (req.headers['x-forwarded-preferred-username'] as string) ||
+    (req.headers['x-forwarded-user'] as string) ||
+    'app-user'
+  );
+}
+
+/**
+ * GET /api/policies/uploads
+ * Lists policies uploaded through the app. These live in the Lakebase
+ * `PolicyUpload` table (the editable "in-between" table); Lakebase Change Data
+ * Feed streams them down into the Delta policy table.
+ */
+policiesRouter.get(
+  '/uploads',
+  async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const uploads = await listPolicyUploads();
+      res.json({
+        uploads: uploads.map((u) => ({
+          id: u.id,
+          policyId: u.policyId,
+          docName: u.docName,
+          category: u.category,
+          title: u.title,
+          owner: u.owner,
+          version: u.version,
+          effectiveDate: u.effectiveDate,
+          reviewDate: u.reviewDate,
+          content: u.content,
+          sourceFilename: u.sourceFilename,
+          uploadedBy: u.uploadedBy,
+          createdAt:
+            u.createdAt instanceof Date
+              ? u.createdAt.toISOString()
+              : String(u.createdAt),
+          updatedAt:
+            u.updatedAt instanceof Date
+              ? u.updatedAt.toISOString()
+              : String(u.updatedAt),
+        })),
+      });
+    } catch (error) {
+      console.error('[/api/policies/uploads] Error:', error);
+      res.status(500).json({
+        error: 'policy_uploads_failed',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+);
+
+/**
+ * POST /api/policies/upload
+ * Adds a new policy from an uploaded document. The PDF is converted to text in
+ * the browser as it loads, so this endpoint receives editable text plus
+ * metadata. The row is written to Lakebase (`PolicyUpload`); Lakebase Change
+ * Data Feed then syncs it down to the Delta `policy_docs` table, where the
+ * existing Vector Search Delta Sync index picks it up for the agent.
+ */
+policiesRouter.post(
+  '/upload',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.body ?? {}) as {
+        title?: string;
+        docName?: string;
+        category?: string;
+        owner?: string;
+        version?: string;
+        effectiveDate?: string;
+        reviewDate?: string;
+        content?: string;
+        sourceFilename?: string;
+      };
+
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      const content =
+        typeof body.content === 'string' ? body.content.trim() : '';
+      if (!title) {
+        res
+          .status(400)
+          .json({ error: 'invalid_request', message: 'title is required' });
+        return;
+      }
+      if (!content) {
+        res.status(400).json({
+          error: 'invalid_request',
+          message: 'content is required (no text extracted from the document)',
+        });
+        return;
+      }
+
+      // doc_name is NOT NULL: derive a slug from the title when not supplied.
+      const docName =
+        (typeof body.docName === 'string' && body.docName.trim()) ||
+        title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 80) ||
+        'uploaded_policy';
+
+      const clean = (v: unknown): string | null =>
+        typeof v === 'string' && v.trim() ? v.trim() : null;
+
+      const saved = await savePolicyUpload({
+        docName,
+        category: clean(body.category) ?? 'Uncategorized',
+        title,
+        owner: clean(body.owner),
+        version: clean(body.version) ?? '1.0',
+        effectiveDate: clean(body.effectiveDate),
+        reviewDate: clean(body.reviewDate),
+        content,
+        sourceFilename: clean(body.sourceFilename),
+        uploadedBy: requestUser(req),
+      });
+
+      res.json({
+        ok: true,
+        policy: {
+          id: saved.id,
+          policyId: saved.policyId,
+          docName: saved.docName,
+          category: saved.category,
+          title: saved.title,
+          owner: saved.owner,
+          version: saved.version,
+        },
+        syncedVia: 'lakebase-cdf',
+      });
+    } catch (error) {
+      console.error('[/api/policies/upload] Error:', error);
+      res.status(500).json({
+        error: 'policy_upload_failed',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+);
+
+/**
+ * PUT /api/policies/content/:policyId
+ * Edits a policy's Markdown text. Uploaded policies (UPL-###) are edited in the
+ * Lakebase `PolicyUpload` table so the change flows back to Delta through CDF;
+ * seed policies that only exist in Delta are updated directly via the warehouse.
+ */
+policiesRouter.put(
+  '/content/:policyId',
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const policyId = String(req.params.policyId ?? '');
+      const { content } = (req.body ?? {}) as { content?: string };
+      if (!policyId) {
+        res
+          .status(400)
+          .json({ error: 'invalid_request', message: 'policyId is required' });
+        return;
+      }
+      if (typeof content !== 'string') {
+        res.status(400).json({
+          error: 'invalid_request',
+          message: 'content (string) is required',
+        });
+        return;
+      }
+
+      // Prefer the Lakebase intermediate row so the edit re-syncs via CDF.
+      const updated = await updatePolicyUploadContent(policyId, content);
+      if (updated) {
+        res.json({ ok: true, policyId, syncedVia: 'lakebase-cdf' });
+        return;
+      }
+
+      // Seed policy that only lives in Delta: edit it directly.
+      await runSql(`
+        UPDATE ${POLICIES_TABLE}
+        SET content = ${sqlString(content)}
+        WHERE policy_id = ${sqlString(policyId)}
+      `);
+
+      res.json({ ok: true, policyId, syncedVia: 'delta' });
+    } catch (error) {
+      console.error('[/api/policies/content PUT] Error:', error);
+      res.status(500).json({
+        error: 'policy_content_update_failed',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+);
 
 /**
  * POST /api/policies/review
@@ -334,11 +535,7 @@ policiesRouter.post(
 
       const commentStr =
         typeof comment === 'string' && comment.trim() ? comment.trim() : null;
-      const reviewer =
-        (req.headers['x-forwarded-email'] as string) ||
-        (req.headers['x-forwarded-preferred-username'] as string) ||
-        (req.headers['x-forwarded-user'] as string) ||
-        'app-user';
+      const reviewer = requestUser(req);
 
       // 1) Persist to Lakebase (transactional audit log).
       const saved = await savePolicyReview({
@@ -351,6 +548,12 @@ policiesRouter.post(
       // 2) Write the latest decision back to the Delta policy table.
       const reviewStatus =
         decision === 'approved' ? 'Approved' : 'Changes requested';
+      // Approving resets the review clock so the policy is no longer overdue;
+      // requesting changes leaves the (likely overdue) review date in place.
+      const reviewDateClause =
+        decision === 'approved'
+          ? `, review_date = ADD_MONTHS(current_date(), ${REVIEW_CYCLE_MONTHS})`
+          : '';
       let deltaError: string | null = null;
       try {
         await runSql(`
@@ -358,7 +561,7 @@ policiesRouter.post(
           SET review_status  = ${sqlString(reviewStatus)},
               review_comment = ${sqlString(commentStr)},
               reviewed_by    = ${sqlString(reviewer)},
-              reviewed_at    = current_timestamp()
+              reviewed_at    = current_timestamp()${reviewDateClause}
           WHERE policy_id = ${sqlString(policyId)}
         `);
       } catch (e) {

@@ -5,14 +5,19 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronRight,
+  Eye,
   FileText,
+  Pencil,
   RefreshCw,
+  Search,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   usePoliciesData,
   submitPolicyReview,
   fetchPolicyContent,
+  updatePolicyContent,
   type PolicyRow,
   type PolicyStatus,
   type ReviewDecision,
@@ -116,15 +121,21 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState<PolicyRow | null>(null);
+  const [query, setQuery] = useState('');
 
   const filtered = useMemo<PolicyRow[]>(() => {
     if (!data) return [];
+    const q = query.trim().toLowerCase();
     return data.policies.filter(
       (p) =>
         (filter === 'all' || p.status === filter) &&
-        (!activeCategory || p.category === activeCategory),
+        (!activeCategory || p.category === activeCategory) &&
+        (!q ||
+          [p.policyId, p.title, p.owner, p.category, p.docName]
+            .filter(Boolean)
+            .some((field) => field.toLowerCase().includes(q))),
     );
-  }, [data, filter, activeCategory]);
+  }, [data, filter, activeCategory, query]);
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -274,8 +285,20 @@ export default function DashboardPage() {
                     </button>
                   )}
                 </div>
-                <div className="flex gap-1">
-                  {FILTERS.map((f) => (
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      type="search"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search policies…"
+                      aria-label="Search policies"
+                      className="h-8 w-56 rounded-md border border-border bg-background py-1 pr-2.5 pl-8 text-foreground text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    {FILTERS.map((f) => (
                     <button
                       type="button"
                       key={f}
@@ -289,7 +312,8 @@ export default function DashboardPage() {
                     >
                       {f}
                     </button>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="max-h-[480px] overflow-auto">
@@ -319,13 +343,8 @@ export default function DashboardPage() {
                       return (
                         <tr
                           key={p.policyId}
-                          onClick={flagged ? () => setReviewing(p) : undefined}
-                          className={cn(
-                            'border-border border-b last:border-0',
-                            flagged
-                              ? 'cursor-pointer hover:bg-muted/60'
-                              : 'hover:bg-muted/30',
-                          )}
+                          onClick={() => setReviewing(p)}
+                          className="cursor-pointer border-border border-b last:border-0 hover:bg-muted/60"
                         >
                           <td className="whitespace-nowrap px-4 py-2 font-mono text-muted-foreground text-xs">
                             {p.policyId}
@@ -431,11 +450,15 @@ function ReviewModal({
   const [err, setErr] = useState<string | null>(null);
   const [content, setContent] = useState<string | null>(null);
   const [contentErr, setContentErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [savingContent, setSavingContent] = useState(false);
 
   useEffect(() => {
     let active = true;
     setContent(null);
     setContentErr(null);
+    setEditing(false);
     fetchPolicyContent(policy.policyId)
       .then((r) => active && setContent(r.content))
       .catch((e) => active && setContentErr(e.message));
@@ -443,6 +466,24 @@ function ReviewModal({
       active = false;
     };
   }, [policy.policyId]);
+
+  async function saveContent() {
+    setSavingContent(true);
+    try {
+      const res = await updatePolicyContent(policy.policyId, draft);
+      setContent(draft);
+      setEditing(false);
+      toast.success(
+        res.syncedVia === 'lakebase-cdf'
+          ? 'Saved — re-syncing to the policy table via Lakebase CDF…'
+          : 'Policy text updated.',
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save text.');
+    } finally {
+      setSavingContent(false);
+    }
+  }
 
   async function submit() {
     if (!decision) return;
@@ -514,19 +555,64 @@ function ReviewModal({
           )}
 
           {/* Policy content */}
-          <div className="max-h-[45vh] min-h-40 overflow-auto rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-            {contentErr ? (
-              <p className="text-destructive text-xs">
-                Couldn’t load content: {contentErr}
-              </p>
-            ) : content === null ? (
-              <p className="text-muted-foreground text-xs">
-                Loading policy content…
-              </p>
-            ) : (
-              <Streamdown>{content}</Streamdown>
-            )}
+          <div className="flex items-center justify-between">
+            <span className="font-medium text-foreground text-sm">
+              Policy text
+            </span>
+            {content !== null &&
+              (editing ? (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(false)}
+                    disabled={savingContent}
+                    className="flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveContent}
+                    disabled={savingContent}
+                    className="flex items-center gap-1 font-medium text-primary text-xs hover:underline disabled:opacity-50"
+                  >
+                    {savingContent ? 'Saving…' : 'Save text'}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(content);
+                    setEditing(true);
+                  }}
+                  className="flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </button>
+              ))}
           </div>
+          {editing ? (
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="max-h-[45vh] min-h-40 w-full resize-none overflow-auto rounded-md border border-border bg-background px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+            />
+          ) : (
+            <div className="max-h-[45vh] min-h-40 overflow-auto rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              {contentErr ? (
+                <p className="text-destructive text-xs">
+                  Couldn’t load content: {contentErr}
+                </p>
+              ) : content === null ? (
+                <p className="text-muted-foreground text-xs">
+                  Loading policy content…
+                </p>
+              ) : (
+                <Streamdown>{content}</Streamdown>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button

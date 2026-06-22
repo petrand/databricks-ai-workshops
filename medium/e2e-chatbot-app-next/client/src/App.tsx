@@ -9,6 +9,7 @@ import ChatLayout from '@/layouts/ChatLayout';
 import NewChatPage from '@/pages/NewChatPage';
 import ChatPage from '@/pages/ChatPage';
 import DashboardPage from '@/pages/DashboardPage';
+import UploadPolicyPage from '@/pages/UploadPolicyPage';
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
                   <Route index element={<NewChatPage />} />
                   <Route path="chat/:id" element={<ChatPage />} />
                   <Route path="dashboard" element={<DashboardPage />} />
+                  <Route path="upload" element={<UploadPolicyPage />} />
                 </Route>
               </Route>
             </Routes>
