@@ -271,6 +271,93 @@ display(spark.sql(f"""
 
 # COMMAND ----------
 
+# MAGIC %md ## 6. Metric view — average normalised foot traffic
+# MAGIC
+# MAGIC Creates a Unity Catalog **metric view** `${catalog}.${ops_schema}.foot_traffic_normalized_metrics`
+# MAGIC over the hourly table. The headline measure is **average normalised foot traffic** =
+# MAGIC `visitor_count / gla_sqm` (people per m² of gross lettable area), averaged across rows — a
+# MAGIC size-adjusted busyness metric that lets you compare a small neighbourhood centre against a
+# MAGIC flagship fairly. Query measures with `MEASURE(...)` and group by any dimension.
+
+# COMMAND ----------
+
+METRIC_VIEW = f"{CATALOG}.{OPS_SCHEMA}.foot_traffic_normalized_metrics"
+
+spark.sql(f"""
+CREATE OR REPLACE VIEW {METRIC_VIEW}
+WITH METRICS
+LANGUAGE YAML
+AS $$
+version: 0.1
+source: {OPS_FQN}
+comment: >-
+  Size-adjusted foot-traffic metrics for the Vicinity portfolio. Normalised foot traffic is
+  visitor_count per hour divided by gross lettable area (gla_sqm), i.e. persons per square metre.
+dimensions:
+  - name: Centre
+    expr: centre_name
+  - name: Centre ID
+    expr: centre_id
+  - name: State
+    expr: state
+  - name: Centre Type
+    expr: centre_type
+  - name: Date
+    expr: traffic_date
+  - name: Hour of Day
+    expr: hour_of_day
+  - name: Day of Week
+    expr: day_of_week
+  - name: Is Weekend
+    expr: is_weekend
+  - name: Is Public Holiday
+    expr: is_public_holiday
+measures:
+  - name: Avg Normalised Foot Traffic
+    expr: AVG(visitor_count / gla_sqm)
+  - name: Total Visitors
+    expr: SUM(visitor_count)
+  - name: Avg Visitors Per Hour
+    expr: AVG(visitor_count)
+$$
+""")
+
+spark.sql(
+    f"COMMENT ON VIEW {METRIC_VIEW} IS "
+    f"'Metric view over {OPS_TABLE}. \"Avg Normalised Foot Traffic\" = AVG(visitor_count / gla_sqm), "
+    f"i.e. average persons per square metre per hour (size-adjusted busyness).'")
+
+print(f"Created metric view: {METRIC_VIEW}")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC **Verify the metric view.** Most/least crowded centres per m² (size-adjusted), and the
+# MAGIC normalised intra-day curve. Note measures are referenced via `MEASURE(...)`.
+
+# COMMAND ----------
+
+print("Average normalised foot traffic (persons/sqm) by centre — most crowded first:")
+display(spark.sql(f"""
+    SELECT `Centre`, `Centre Type`,
+           ROUND(MEASURE(`Avg Normalised Foot Traffic`), 5) AS persons_per_sqm,
+           MEASURE(`Total Visitors`) AS total_visitors
+    FROM {METRIC_VIEW}
+    GROUP BY `Centre`, `Centre Type`
+    ORDER BY persons_per_sqm DESC
+"""))
+
+print("Normalised foot traffic by hour of day (persons/sqm):")
+display(spark.sql(f"""
+    SELECT `Hour of Day`,
+           ROUND(MEASURE(`Avg Normalised Foot Traffic`), 5) AS persons_per_sqm
+    FROM {METRIC_VIEW}
+    GROUP BY `Hour of Day`
+    ORDER BY `Hour of Day`
+"""))
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ### Use it in a Genie space
 # MAGIC

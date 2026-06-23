@@ -55,6 +55,16 @@ This single notebook creates, in order:
 3. A **Knowledge Assistant** (Agent Bricks) + knowledge source → a serving endpoint named like `ka-xxxxxxxx-endpoint`.
 4. `dev.operations.foot_traffic` — synthetic daily foot-traffic for the Genie space (Section 7 of the notebook).
 
+Then **also Run All** on the hourly foot-traffic notebook (the foot-traffic demo):
+
+```
+data/workspace_setup_script/create_foot_traffic_hourly_data.py
+```
+
+Widgets (defaults are fine): `catalog=dev`, `ops_schema=operations`, `ops_table=foot_traffic_hourly`,
+`traffic_days=90`. This creates `dev.operations.foot_traffic_hourly` — one row per centre per
+trading hour — used for intra-day ("busiest hour", weekday vs weekend by hour) Genie questions.
+
 **Write these down** from the notebook output:
 
 | Value | Example | Used in |
@@ -64,16 +74,71 @@ This single notebook creates, in order:
 
 ---
 
-## 3. Create the Genie space — `[UI]`
+## 3. Create the Foot Traffic Genie space — `[UI]`
 
-Genie spaces can't be created from the notebook.
+Genie spaces can't be created from the notebook — build it by hand once.
 
-1. **Genie → New** → add `dev.operations.foot_traffic` as a data table.
-2. Name it (e.g. *Vicinity Foot Traffic Genie*) and attach a SQL warehouse.
-3. Copy the **space id** from the URL (e.g. `01f1693a7f2f1e148e53cc17d77fe89d`).
+1. **Genie → New**.
+2. Add **both** foot-traffic tables as data sources:
+   - `dev.operations.foot_traffic` — one row per centre per **day**.
+   - `dev.operations.foot_traffic_hourly` — one row per centre per **trading hour**.
+3. Name it *Vicinity Foot Traffic Genie* and attach a Serverless SQL warehouse.
+4. Paste the **sample instructions** below into the space's **Instructions** box.
+5. Add the **benchmark questions** below as sample/curated questions (optional but recommended).
+6. Copy the **space id** from the URL (e.g. `01f1693a7f2f1e148e53cc17d77fe89d`) — you'll wire it
+   into `databricks.yml` and `agent.py` in step 5.
 
-Seed questions: "Which centre had the highest foot traffic last weekend?", "Compare
-weekday vs weekend visitors for Chadstone.", "Which days were centres closed, and why?"
+### Sample Genie instructions
+
+> ```
+> This space answers foot-traffic questions for the Vicinity Centres shopping-centre
+> portfolio. There are two tables, both fictional/synthetic:
+>
+> - dev.operations.foot_traffic — ONE ROW PER CENTRE PER DAY. Use this for daily,
+>   weekly, monthly, weekend-vs-weekday, holiday, and "which centre" questions.
+>   Key columns: traffic_date, centre_name, state, centre_type, visitor_count
+>   (total visitors that day), peak_hour, avg_dwell_minutes, is_weekend,
+>   is_public_holiday, holiday_name, is_trading_day.
+> - dev.operations.foot_traffic_hourly — ONE ROW PER CENTRE PER TRADING HOUR. Use this
+>   ONLY for intra-day / "by hour" / "busiest hour" / "morning vs evening" questions.
+>   Key columns: traffic_hour_ts, hour_of_day (0-23), centre_name, visitor_count
+>   (visitors in that hour).
+>
+> Rules of thumb:
+> - "How busy", "total visitors", "compare centres", "trend over time" → use foot_traffic.
+> - Anything mentioning an hour, time of day, morning/afternoon/evening, or "busiest hour"
+>   → use foot_traffic_hourly. Do NOT sum hourly rows to get a daily total unless the user
+>   explicitly asks to reconcile the two; prefer foot_traffic.visitor_count for daily totals.
+> - Centres do not trade on Christmas Day or Good Friday: foot_traffic has visitor_count = 0
+>   (is_trading_day = false) and foot_traffic_hourly has no rows for those dates.
+> - States are Australian: VIC, NSW, WA, SA. "Last weekend" means the most recent Sat+Sun.
+> - When the user names a centre (e.g. "Chadstone"), filter on centre_name.
+> - Always show centre_name (not centre_id) in results, and order results sensibly
+>   (most-recent date first, or highest visitor_count first).
+> ```
+
+### Benchmark questions
+
+Use these to sanity-check the space after setup (mix of daily and hourly):
+
+Daily (`foot_traffic`):
+- Which centre had the highest foot traffic last weekend?
+- Compare weekday vs weekend visitors for Chadstone.
+- What were total visitors by state last month?
+- Show the daily visitor trend for Emporium Melbourne over the last 30 days.
+- Which days were centres closed, and why?
+- How does Boxing Day traffic compare to a normal Saturday?
+- What is the average dwell time by centre type?
+
+Hourly (`foot_traffic_hourly`):
+- What is the busiest hour of the day at Chadstone?
+- Compare morning vs evening foot traffic on weekdays across the portfolio.
+- Show the hourly visitor curve for Emporium Melbourne last Thursday (late-night trade).
+- Which centre has the most evening (after 5pm) traffic on weekends?
+- What is the average visitors per hour by hour of day?
+
+> If hourly questions return "table not found" or empty results, confirm step 2 added
+> `dev.operations.foot_traffic_hourly` and that the app SP has `SELECT` on it (step 8).
 
 ---
 
@@ -184,6 +249,7 @@ databricks grants update CATALOG dev          --json "{\"changes\":[{\"principal
 databricks grants update SCHEMA  dev.policies  --json "{\"changes\":[{\"principal\":\"$SP\",\"add\":[\"USE_SCHEMA\"]}]}"  --profile <profile>
 databricks grants update SCHEMA  dev.operations --json "{\"changes\":[{\"principal\":\"$SP\",\"add\":[\"USE_SCHEMA\"]}]}" --profile <profile>
 databricks grants update TABLE   dev.operations.foot_traffic --json "{\"changes\":[{\"principal\":\"$SP\",\"add\":[\"SELECT\"]}]}" --profile <profile>
+databricks grants update TABLE   dev.operations.foot_traffic_hourly --json "{\"changes\":[{\"principal\":\"$SP\",\"add\":[\"SELECT\"]}]}" --profile <profile>
 ```
 
 Also grant the SP **`CAN_RUN`** on the Genie space (Genie UI → Share), if not already.
@@ -241,7 +307,7 @@ the dashboard or to the agent.
 | App env vars, service principal, resource **grants** | **DAB** |
 | Lakebase schemas/tables (`agent_openai_memory`, `ai_chatbot`, `drizzle`) | **auto** at app startup (needs SP privileges) |
 | MLflow experiment | `uv run quickstart` (step 1) |
-| `policy_docs`, Vector Search index, Knowledge Assistant, `foot_traffic` | **notebook** (step 2) |
+| `policy_docs`, Vector Search index, Knowledge Assistant, `foot_traffic`, `foot_traffic_hourly` | **notebook** (step 2) |
 | Genie space | **UI** (step 3) |
 | SQL warehouse | pre-existing (step 4) |
 | `USE CATALOG`/`USE SCHEMA`, Genie table SELECT | **manual** grants (step 8) |
