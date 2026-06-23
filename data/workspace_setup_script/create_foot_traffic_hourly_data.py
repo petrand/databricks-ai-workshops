@@ -290,9 +290,6 @@ LANGUAGE YAML
 AS $$
 version: 0.1
 source: {OPS_FQN}
-comment: >-
-  Size-adjusted foot-traffic metrics for the Vicinity portfolio. Normalised foot traffic is
-  visitor_count per hour divided by gross lettable area (gla_sqm), i.e. persons per square metre.
 dimensions:
   - name: Centre
     expr: centre_name
