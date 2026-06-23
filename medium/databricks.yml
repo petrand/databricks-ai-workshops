@@ -39,7 +39,7 @@ resources:
           - name: CHAT_PROXY_ALLOWED_PATH_PREFIXES
             value: "/pdfjs/"
           - name: MLFLOW_EXPERIMENT_ID
-            value: "62693633492351"
+            value: "3907254377919918"
           - name: LAKEBASE_INSTANCE_NAME
             value: ${resources.database_instances.router_lakebase.name}
           - name: LAKEBASE_AGENT_MEMORY_SCHEMA
@@ -58,19 +58,23 @@ resources:
       resources:
         - name: 'experiment'
           experiment:
-            experiment_id: "62693633492351"
+          #TODO: Replace with the ID of the MLflow experiment you created
+            experiment_id: "3907254377919918"
             permission: 'CAN_MANAGE'
         - name: 'policy_docs_index'
           uc_securable:
+          #TODO: Replace with the full name of the Vector Search index you created
             securable_full_name: 'dev.policies.policy_docs_index'
             securable_type: 'TABLE'
             permission: 'SELECT'
         - name: 'sql-warehouse'
           description: "SQL warehouse for the policy-compliance dashboard"
           sql_warehouse:
+          #TODO: Replace with the ID of the SQL warehouse you created
             id: '30260ffcfe45ef76'
             permission: 'CAN_USE'
         - name: 'policy_docs'
+          #TODO: Replace with the full name of the Unity Catalog table you created
           description: "Unity Catalog table read by the policy-compliance dashboard"
           uc_securable:
             securable_full_name: 'dev.policies.policy_docs'
@@ -79,19 +83,22 @@ resources:
         - name: 'policy_docs_write'
           description: "Write access so the dashboard can record reviews and edit policy text"
           uc_securable:
+          #TODO: Replace with the full name of the Unity Catalog table you created
             securable_full_name: 'dev.policies.policy_docs'
             securable_type: 'TABLE'
             permission: 'MODIFY'
         - name: 'knowledge_assistant_endpoint'
           description: "Agent Bricks Knowledge Assistant fronted by the in-app MCP server"
           serving_endpoint:
-            name: 'ka-a9d02891-endpoint'
+          #TODO: Replace with the name of the Knowledge Assistant endpoint you created
+            name: 'ka-502ebc0c-endpoint'
             permission: 'CAN_QUERY'
         - name: 'foot_traffic_genie'
           description: "Foot traffic Genie space queried via managed MCP"
           genie_space:
+          #TODO: Replace with the name of the Genie space you created
             name: 'Vicinity Foot Traffic Genie'
-            space_id: '01f1693a7f2f1e148e53cc17d77fe89d'
+            space_id: '01f16ee9c4f313fb8841bd033ac15e9b'
             permission: 'CAN_RUN'
         - name: 'database'
           database:
@@ -104,13 +111,5 @@ targets:
     mode: development
     default: true
     workspace:
+    #TODO: Replace with the URL of your workspace
       host: https://dbc-22969be4-7a92.cloud.databricks.com
-
-  prod:
-    mode: production
-    workspace:
-      host: https://dbc-22969be4-7a92.cloud.databricks.com
-    resources:
-      apps:
-        agent_openai_agents_sdk:
-          name: agent-nonadmin-l200

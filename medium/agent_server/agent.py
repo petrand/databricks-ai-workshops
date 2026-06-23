@@ -64,7 +64,7 @@ SYSTEM_PROMPT = (
 MODEL = 'databricks-claude-opus-4-6'
 MCP_SERVERS = [
     ('Vicinity Policy Search', '/api/2.0/mcp/vector-search/dev/policies/policy_docs_index'),
-    ('Foot Traffic Assistant', '/api/2.0/mcp/genie/01f1693a7f2f1e148e53cc17d77fe89d'),
+    ('Foot Traffic Assistant', '/api/2.0/mcp/genie/01f16ee9c4f313fb8841bd033ac15e9b'),
 ]
 
 # END GENERATED

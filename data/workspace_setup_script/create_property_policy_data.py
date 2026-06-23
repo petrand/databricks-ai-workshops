@@ -3301,11 +3301,14 @@ print(f"OK: 100 unique policies | words {min(word_counts)}-{max(word_counts)} | 
 # COMMAND ----------
 
 import datetime
-from pyspark.sql.types import StructType, StructField, StringType, DateType
+from pyspark.sql.types import (StructType, StructField, StringType, DateType,
+                               TimestampType)
 
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA} "
           f"COMMENT 'Synthetic company policies for retail property management demo'")
 
+# The four review_* columns are written by the /dashboard review-decision flow
+# (server/src/routes/policies.ts) and read back on load. They start NULL (no review yet).
 schema_def = StructType([
     StructField("policy_id", StringType(), False),
     StructField("doc_name", StringType(), False),
@@ -3316,6 +3319,10 @@ schema_def = StructType([
     StructField("owner", StringType(), True),
     StructField("version", StringType(), True),
     StructField("content", StringType(), True),
+    StructField("review_status", StringType(), True),
+    StructField("review_comment", StringType(), True),
+    StructField("reviewed_by", StringType(), True),
+    StructField("reviewed_at", TimestampType(), True),
 ])
 
 def to_date(s):
@@ -3324,6 +3331,7 @@ def to_date(s):
 rows = [(
     p["id"], p["doc_name"], p["category"], p["title"],
     to_date(p["eff"]), to_date(p["rev"]), p["owner"], p["ver"], doc(p),
+    None, None, None, None,  # review_status, review_comment, reviewed_by, reviewed_at
 ) for p in POLICIES]
 
 df = spark.createDataFrame(rows, schema_def)
