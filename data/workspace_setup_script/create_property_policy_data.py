@@ -3600,3 +3600,198 @@ answer = "".join(
     if isinstance(item.get("content"), list)
 )
 print(answer or resp)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 7. Foot-traffic operational data (for the Genie space)
+# MAGIC
+# MAGIC Generates synthetic **daily foot-traffic** records per shopping centre and writes
+# MAGIC `${catalog}.${ops_schema}.${ops_table}` (defaults `dev` / `operations` / `foot_traffic`).
+# MAGIC This is the table the **Vicinity Foot Traffic Genie** space answers questions over
+# MAGIC ("how busy is a centre", weekend vs weekday, holiday closures, busiest centres).
+# MAGIC
+# MAGIC One row per centre per day, with realistic patterns: weekend uplift, a December
+# MAGIC pre-Christmas surge, Boxing Day spikes, and zero trade on Christmas Day / Good Friday.
+
+# COMMAND ----------
+
+import datetime
+
+dbutils.widgets.text("ops_schema", "operations", "Foot-traffic schema")
+dbutils.widgets.text("ops_table", "foot_traffic", "Foot-traffic table")
+dbutils.widgets.text("traffic_days", "180", "Days of history to generate")
+dbutils.widgets.text("traffic_end_date", "", "End date YYYY-MM-DD (blank = today)")
+
+OPS_SCHEMA = dbutils.widgets.get("ops_schema")
+OPS_TABLE = dbutils.widgets.get("ops_table")
+OPS_FQN = f"{CATALOG}.{OPS_SCHEMA}.{OPS_TABLE}"
+N_DAYS = int(dbutils.widgets.get("traffic_days") or "180")
+_end_raw = dbutils.widgets.get("traffic_end_date").strip()
+END_DATE = (datetime.datetime.strptime(_end_raw, "%Y-%m-%d").date()
+            if _end_raw else datetime.date.today())
+START_DATE = END_DATE - datetime.timedelta(days=N_DAYS - 1)
+print(f"Foot-traffic target: {OPS_FQN}  ({N_DAYS} days, {START_DATE} -> {END_DATE})")
+
+# COMMAND ----------
+
+import random
+
+random.seed(42)  # reproducible
+
+# Fictional Vicinity-style portfolio. base_daily = typical weekday visitor count.
+# centre_id, name, state, centre_type, gla_sqm, base_daily
+CENTRES = [
+    ("CTR-01", "Chadstone",          "VIC", "Flagship",     210000, 78000),
+    ("CTR-02", "Emporium Melbourne", "VIC", "CBD",           62000, 41000),
+    ("CTR-03", "Northland",          "VIC", "Regional",      98000, 39000),
+    ("CTR-04", "Box Hill Central",   "VIC", "Sub-regional",  47000, 24000),
+    ("CTR-05", "The Glen",           "VIC", "Sub-regional",  64000, 27000),
+    ("CTR-06", "DFO South Wharf",    "VIC", "Outlet",        38000, 21000),
+    ("CTR-07", "Bankstown Central",  "NSW", "Regional",      83000, 34000),
+    ("CTR-08", "Chatswood Chase",    "NSW", "Sub-regional",  46000, 26000),
+    ("CTR-09", "Roselands",          "NSW", "Sub-regional",  58000, 23000),
+    ("CTR-10", "Galleria",           "WA",  "Regional",      75000, 31000),
+    ("CTR-11", "Mandurah Forum",     "WA",  "Sub-regional",  56000, 19000),
+    ("CTR-12", "Castle Plaza",       "SA",  "Neighbourhood", 34000, 14000),
+]
+
+# --- Australian public holidays: fixed-date + Easter-derived (Anonymous Gregorian) ---
+def _easter(year):
+    a = year % 19; b = year // 100; c = year % 100; d = b // 4; e = b % 4
+    f = (b + 8) // 25; g = (b - f + 1) // 3; h = (19 * a + b - d - g + 15) % 30
+    i = c // 4; k = c % 4; l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31; day = ((h + l - 7 * m + 114) % 31) + 1
+    return datetime.date(year, month, day)
+
+def au_holidays(years):
+    hol = {}
+    for y in years:
+        hol[datetime.date(y, 1, 1)]   = "New Year's Day"
+        hol[datetime.date(y, 1, 26)]  = "Australia Day"
+        hol[datetime.date(y, 4, 25)]  = "ANZAC Day"
+        hol[datetime.date(y, 12, 25)] = "Christmas Day"
+        hol[datetime.date(y, 12, 26)] = "Boxing Day"
+        es = _easter(y)
+        hol[es - datetime.timedelta(days=2)] = "Good Friday"
+        hol[es]                              = "Easter Sunday"
+        hol[es + datetime.timedelta(days=1)] = "Easter Monday"
+    return hol
+
+HOLIDAYS = au_holidays(range(START_DATE.year, END_DATE.year + 1))
+CLOSED = {"Christmas Day", "Good Friday"}  # centres do not trade
+
+DOW = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+DOW_FACTOR = {0: 0.92, 1: 0.90, 2: 0.95, 3: 1.00, 4: 1.18, 5: 1.45, 6: 1.22}
+
+def _season(d):
+    # December pre-Christmas surge, January sales, mid-winter dip.
+    return {12: 1.35, 1: 1.12, 6: 0.93, 7: 0.90}.get(d.month, 1.0)
+
+rows = []
+d = START_DATE
+while d <= END_DATE:
+    wd = d.weekday()
+    hol_name = HOLIDAYS.get(d)
+    is_hol = hol_name is not None
+    closed = hol_name in CLOSED
+    for cid, name, state, ctype, gla, base in CENTRES:
+        if closed:
+            visitors, peak_hour, dwell = 0, None, None
+        else:
+            f = DOW_FACTOR[wd] * _season(d)
+            if hol_name == "Boxing Day":
+                f *= 2.4
+            elif hol_name == "Easter Sunday":
+                f *= 0.6  # restricted trade
+            elif is_hol:
+                f *= 1.08
+            visitors = int(base * f * random.uniform(0.90, 1.10))
+            peak_hour = random.choice([12, 13, 14]) if wd >= 5 else random.choice([12, 17, 18])
+            dwell = round(
+                random.uniform(70, 95) if ctype in ("Flagship", "CBD", "Regional")
+                else random.uniform(38, 58), 1)
+        rows.append((cid, name, state, ctype, gla, d, DOW[wd],
+                     wd >= 5, is_hol, hol_name, (not closed), visitors, peak_hour, dwell))
+    d += datetime.timedelta(days=1)
+
+print(f"Generated {len(rows):,} rows ({len(CENTRES)} centres x {N_DAYS} days)")
+
+# COMMAND ----------
+
+from pyspark.sql.types import (StructType, StructField, StringType, DateType,
+                               IntegerType, BooleanType, DoubleType)
+
+ft_schema = StructType([
+    StructField("centre_id", StringType(), False),
+    StructField("centre_name", StringType(), False),
+    StructField("state", StringType(), True),
+    StructField("centre_type", StringType(), True),
+    StructField("gla_sqm", IntegerType(), True),
+    StructField("traffic_date", DateType(), False),
+    StructField("day_of_week", StringType(), True),
+    StructField("is_weekend", BooleanType(), True),
+    StructField("is_public_holiday", BooleanType(), True),
+    StructField("holiday_name", StringType(), True),
+    StructField("is_trading_day", BooleanType(), True),
+    StructField("visitor_count", IntegerType(), True),
+    StructField("peak_hour", IntegerType(), True),
+    StructField("avg_dwell_minutes", DoubleType(), True),
+])
+
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{OPS_SCHEMA} "
+          f"COMMENT 'Synthetic operational data (foot traffic) for the property management demo'")
+
+ft_df = spark.createDataFrame(rows, ft_schema)
+(ft_df.write
+   .format("delta")
+   .mode(WRITE_MODE)
+   .option("overwriteSchema", "true")
+   .saveAsTable(OPS_FQN))
+
+# Table + column comments help Genie generate accurate SQL.
+spark.sql(
+    f"COMMENT ON TABLE {OPS_FQN} IS "
+    f"'Daily foot-traffic (visitor counts) per Vicinity shopping centre; one row per centre "
+    f"per day. visitor_count is 0 on non-trading public holidays (Christmas Day, Good Friday).'")
+for _col, _desc in [
+    ("centre_id", "Stable centre identifier, e.g. CTR-01"),
+    ("centre_name", "Shopping centre name"),
+    ("state", "Australian state/territory (VIC, NSW, WA, SA)"),
+    ("centre_type", "Format: Flagship, CBD, Regional, Sub-regional, Outlet, Neighbourhood"),
+    ("gla_sqm", "Gross lettable area in square metres (a proxy for centre size)"),
+    ("traffic_date", "Calendar date of the foot-traffic measurement"),
+    ("day_of_week", "Day name (Monday..Sunday)"),
+    ("is_weekend", "True for Saturday and Sunday"),
+    ("is_public_holiday", "True if the date is an Australian public holiday"),
+    ("holiday_name", "Name of the public holiday, otherwise null"),
+    ("is_trading_day", "False when the centre was closed (no trade)"),
+    ("visitor_count", "Total daily visitors (foot traffic); 0 when not trading"),
+    ("peak_hour", "Hour of day (0-23) with the most visitors; null when closed"),
+    ("avg_dwell_minutes", "Average visitor dwell time in minutes; null when closed"),
+]:
+    spark.sql(f"COMMENT ON COLUMN {OPS_FQN}.{_col} IS '{_desc}'")
+
+print(f"Wrote {ft_df.count():,} rows to {OPS_FQN}")
+display(ft_df.orderBy("traffic_date", ascending=False).limit(20))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### Create the Genie space (manual, one-time)
+# MAGIC
+# MAGIC Genie spaces aren't created from this notebook. In the workspace UI:
+# MAGIC 1. **Genie → New** and add `${catalog}.${ops_schema}.${ops_table}` as a data table.
+# MAGIC 2. Name it (e.g. *Vicinity Foot Traffic Genie*) and attach a SQL warehouse.
+# MAGIC 3. Copy the **space id** from the URL into `databricks.yml` (`foot_traffic_genie` resource)
+# MAGIC    and `agent_server/agent.py` (the Genie MCP URL).
+# MAGIC 4. Grant the app's service principal `CAN_RUN` on the space, plus `USE CATALOG`,
+# MAGIC    `USE SCHEMA`, and `SELECT` on this table (see the deploy runbook).
+# MAGIC
+# MAGIC Sample questions to seed the space:
+# MAGIC - "Which centre had the highest foot traffic last weekend?"
+# MAGIC - "Compare weekday vs weekend visitors for Chadstone."
+# MAGIC - "How busy is Emporium Melbourne on public holidays?"
+# MAGIC - "Show daily visitors for VIC centres over the last 30 days."
+# MAGIC - "Which days were centres closed, and why?"
