@@ -1,0 +1,36 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Helvetica, Arial, sans-serif",
+    "fontSize": "15px",
+    "actorBkg": "#eff4ff",
+    "actorBorder": "#0b1c30",
+    "actorTextColor": "#0b1c30",
+    "actorLineColor": "#76777d",
+    "signalColor": "#0b1c30",
+    "signalTextColor": "#0b1c30",
+    "noteBkgColor": "#fde8e5",
+    "noteTextColor": "#0b1c30",
+    "noteBorderColor": "#fb331e",
+    "sequenceNumberColor": "#ffffff",
+    "activationBkgColor": "#fb331e"
+  }
+}}%%
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant A as Databricks App<br/>(OpenAI Agents SDK)
+    participant FM as Foundation Model<br/>(Claude via AI Gateway)
+    participant LB as Lakebase<br/>(Postgres · agent_openai_memory)
+
+    U->>A: First message (no session_id yet)
+    Note over A: get_session_id(): none found,<br/>so generate a new UUID
+    A->>LB: open session · get_items(session_id)
+    LB-->>A: empty — brand-new thread
+    Note over A: deduplicate_input: no history,<br/>send full input = [ first message ]
+    A->>FM: system prompt + tools + [ first message ]
+    FM-->>A: assistant reply
+    A->>LB: add_items([ user msg, assistant msg ])
+    Note over LB: INSERT rows keyed by session_id
+    A-->>U: reply + session_id (custom_outputs)
+    Note over U,LB: Client keeps the session_id to continue this thread later

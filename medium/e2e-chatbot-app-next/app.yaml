@@ -7,3 +7,8 @@ env:
   # FEEDBACK RESOURCE: Uncomment to enable the feedback UI (requires experiment resource in databricks.yml)
   # - name: MLFLOW_EXPERIMENT_ID
   #   valueFrom: experiment
+  # POLICY DASHBOARD: powers the /dashboard view (requires the sql-warehouse resource in databricks.yml)
+  - name: DATABRICKS_SQL_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: POLICIES_TABLE
+    value: dev.policies.policy_docs

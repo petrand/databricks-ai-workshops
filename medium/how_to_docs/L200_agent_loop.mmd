@@ -1,0 +1,62 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryColor": "#eff4ff",
+    "primaryTextColor": "#0b1c30",
+    "primaryBorderColor": "#0b1c30",
+    "lineColor": "#0b1c30",
+    "secondaryColor": "#f8f9ff",
+    "tertiaryColor": "#fde8e5",
+    "edgeLabelBackground": "#ffffff",
+    "fontFamily": "Helvetica, Arial, sans-serif",
+    "fontSize": "15px"
+  }
+}}%%
+flowchart TB
+    USER(["User message"])
+    ANS(["Final answer"])
+
+    REASON["Agent Loop: Reason\n(Claude via AI Gateway / FMAPI)"]
+    DEC{"Need a tool?"}
+    RESULT["Tool result\n(observe)"]
+
+    subgraph MCP_TOOLS["Tools exposed via MCP (Model Context Protocol)"]
+        direction LR
+        VSE["Vector Search Index (VSE)\nsemantic + keyword\ndocument search"]
+        GEN["Genie Space\nnatural language\nto SQL over tables"]
+        KA["Knowledge Assistant (KA)\nmanaged RAG\nover your documents"]
+        VSE ~~~ GEN ~~~ KA
+    end
+
+    MEM[("Lakebase\nconversation memory")]
+    UC["Unity Catalog\ngoverns every tool"]
+    MLF["MLflow\ntracing"]
+
+    USER --> REASON
+    REASON --> DEC
+    DEC -->|"no: task done"| ANS
+    DEC -->|"yes: call a tool via MCP"| MCP_TOOLS
+    MCP_TOOLS --> RESULT
+    RESULT -->|"repeat: feed back, next turn"| REASON
+
+    MEM <-->|"read / write each turn"| REASON
+    UC -.->|"permissions + lineage"| MCP_TOOLS
+    MLF -.->|"records every step"| REASON
+
+    classDef io       fill:#f8f9ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30,font-weight:bold
+    classDef reason   fill:#fb331e,stroke:#0b1c30,stroke-width:3px,color:#ffffff,font-weight:bold
+    classDef decision fill:#fde8e5,stroke:#fb331e,stroke-width:2px,color:#0b1c30,font-weight:bold
+    classDef result   fill:#eff4ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30
+    classDef tool     fill:#fde8e5,stroke:#fb331e,stroke-width:2px,color:#0b1c30
+    classDef memory   fill:#eff4ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30
+    classDef gov      fill:#0b1c30,stroke:#0b1c30,stroke-width:2px,color:#ffffff,font-weight:bold
+    classDef obs      fill:#f8f9ff,stroke:#0b1c30,stroke-width:2px,color:#0b1c30,stroke-dasharray:5 4
+
+    class USER,ANS io
+    class REASON reason
+    class DEC decision
+    class RESULT result
+    class VSE,GEN,KA tool
+    class MEM memory
+    class UC gov
+    class MLF obs

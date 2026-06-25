@@ -41,6 +41,15 @@ agent_server = AgentServer("ResponsesAgent", enable_chat_proxy=True)
 app = agent_server.app  # noqa: F841
 setup_mlflow_git_based_version_tracking()
 
+# --- Self-hosted Knowledge Assistant MCP server (runs in a background thread) ---
+# Databricks has no managed MCP server for Agent Bricks Knowledge Assistants, so
+# we host one here (see agent_server/ka_mcp.py). It listens on a localhost port
+# and the router consumes it over MCP (see agent.py). Running it in a daemon
+# thread keeps it independent of this app's ASGI lifespan.
+from agent_server import ka_mcp  # noqa: E402
+
+ka_mcp.start_in_background()
+
 # Run table creation at startup
 try:
     asyncio.run(_ensure_lakebase_tables())

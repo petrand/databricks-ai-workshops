@@ -58,8 +58,12 @@ export type DBMessage = InferSelectModel<typeof message>;
 export const vote = createTable(
   'Vote',
   {
-    chatId: uuid('chatId').notNull().references(() => chat.id),
-    messageId: uuid('messageId').notNull().references(() => message.id),
+    chatId: uuid('chatId')
+      .notNull()
+      .references(() => chat.id),
+    messageId: uuid('messageId')
+      .notNull()
+      .references(() => message.id),
     isUpvoted: boolean('isUpvoted').notNull(),
   },
   (table) => ({
@@ -68,3 +72,44 @@ export const vote = createTable(
 );
 
 export type Vote = InferSelectModel<typeof vote>;
+
+// Policy review decisions captured from the Policy Compliance dashboard.
+// This is the transactional audit log in Lakebase; the latest decision is also
+// written back to the Delta policy table for analytics.
+export const policyReview = createTable('PolicyReview', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  policyId: text('policyId').notNull(),
+  decision: varchar('decision', {
+    enum: ['approved', 'changes_requested'],
+  }).notNull(),
+  comment: text('comment'),
+  reviewer: text('reviewer').notNull(),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type PolicyReview = InferSelectModel<typeof policyReview>;
+
+// Uploaded policies land here first (Lakebase Postgres). The PDF is converted
+// to text in the browser as it loads, so the `content` column is editable
+// before and after upload. Lakebase Change Data Feed (wal2delta) streams every
+// insert/update on this table to a Unity Catalog Delta history table, which a
+// pipeline merges into the Delta `policy_docs` table the agent searches.
+// Requires `ALTER TABLE ai_chatbot."PolicyUpload" REPLICA IDENTITY FULL;` for CDF.
+export const policyUpload = createTable('PolicyUpload', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  policyId: text('policyId').notNull().unique(), // UPL-### (distinct from seed POL-###)
+  docName: text('docName').notNull(),
+  category: text('category'),
+  title: text('title').notNull(),
+  owner: text('owner'),
+  version: text('version'),
+  effectiveDate: text('effectiveDate'), // YYYY-MM-DD; CAST to DATE in the merge
+  reviewDate: text('reviewDate'),
+  content: text('content').notNull(),
+  sourceFilename: text('sourceFilename'),
+  uploadedBy: text('uploadedBy').notNull(),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type PolicyUpload = InferSelectModel<typeof policyUpload>;

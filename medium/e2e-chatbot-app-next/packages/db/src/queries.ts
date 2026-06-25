@@ -17,9 +17,13 @@ import {
   chat,
   message,
   vote,
+  policyReview,
+  policyUpload,
   type DBMessage,
   type Chat,
   type Vote,
+  type PolicyReview,
+  type PolicyUpload,
 } from './schema';
 import type { VisibilityType } from '@chat-template/utils';
 import { ChatSDKError } from '@chat-template/core/errors';
@@ -412,7 +416,6 @@ export async function updateChatVisiblityById({
   }
 }
 
-
 export async function updateChatTitleById({
   chatId,
   title,
@@ -421,7 +424,9 @@ export async function updateChatTitleById({
   title: string;
 }) {
   if (!isDatabaseAvailable()) {
-    console.log('[updateChatTitleById] Database not available, skipping update');
+    console.log(
+      '[updateChatTitleById] Database not available, skipping update',
+    );
     return;
   }
 
@@ -487,11 +492,110 @@ export async function voteMessage({
     });
 }
 
-export async function getVotesByChatId({ id }: { id: string }): Promise<Vote[]> {
+export async function getVotesByChatId({
+  id,
+}: { id: string }): Promise<Vote[]> {
   if (!isDatabaseAvailable()) {
     return [];
   }
 
   const db = await ensureDb();
   return db.select().from(vote).where(eq(vote.chatId, id));
+}
+
+export async function savePolicyReview({
+  policyId,
+  decision,
+  comment,
+  reviewer,
+}: {
+  policyId: string;
+  decision: 'approved' | 'changes_requested';
+  comment: string | null;
+  reviewer: string;
+}): Promise<PolicyReview> {
+  if (!isDatabaseAvailable()) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Database not available for policy reviews',
+    );
+  }
+
+  const [row] = await (await ensureDb())
+    .insert(policyReview)
+    .values({ policyId, decision, comment, reviewer, createdAt: new Date() })
+    .returning();
+  return row;
+}
+
+/**
+ * Allocate the next uploaded-policy id of the form UPL-### by scanning the
+ * Lakebase upload table only (no SQL warehouse round-trip). The UPL- prefix
+ * keeps uploaded ids distinct from the seed POL-### ids in the Delta table.
+ */
+async function nextUploadPolicyId(): Promise<string> {
+  const db = await ensureDb();
+  const rows = await db
+    .select({ policyId: policyUpload.policyId })
+    .from(policyUpload);
+  let max = 0;
+  for (const r of rows) {
+    const n = Number.parseInt((r.policyId ?? '').replace(/^UPL-/, ''), 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `UPL-${String(max + 1).padStart(3, '0')}`;
+}
+
+export async function savePolicyUpload(input: {
+  docName: string;
+  category: string | null;
+  title: string;
+  owner: string | null;
+  version: string | null;
+  effectiveDate: string | null;
+  reviewDate: string | null;
+  content: string;
+  sourceFilename: string | null;
+  uploadedBy: string;
+}): Promise<PolicyUpload> {
+  if (!isDatabaseAvailable()) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Database not available for policy uploads',
+    );
+  }
+
+  const db = await ensureDb();
+  const policyId = await nextUploadPolicyId();
+  const now = new Date();
+  const [row] = await db
+    .insert(policyUpload)
+    .values({ ...input, policyId, createdAt: now, updatedAt: now })
+    .returning();
+  return row;
+}
+
+export async function listPolicyUploads(): Promise<PolicyUpload[]> {
+  if (!isDatabaseAvailable()) return [];
+  const db = await ensureDb();
+  return db.select().from(policyUpload).orderBy(desc(policyUpload.createdAt));
+}
+
+/**
+ * Update the content of an uploaded policy. Returns the updated row, or null
+ * when no upload with that policyId exists (so callers can fall back to a
+ * direct Delta edit for seed policies).
+ */
+export async function updatePolicyUploadContent(
+  policyId: string,
+  content: string,
+): Promise<PolicyUpload | null> {
+  if (!isDatabaseAvailable()) return null;
+  const db = await ensureDb();
+  const [row] = await db
+    .update(policyUpload)
+    .set({ content, updatedAt: new Date() })
+    .where(eq(policyUpload.policyId, policyId))
+    .returning();
+  return row ?? null;
 }

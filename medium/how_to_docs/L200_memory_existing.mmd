@@ -1,0 +1,38 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Helvetica, Arial, sans-serif",
+    "fontSize": "15px",
+    "actorBkg": "#eff4ff",
+    "actorBorder": "#0b1c30",
+    "actorTextColor": "#0b1c30",
+    "actorLineColor": "#76777d",
+    "signalColor": "#0b1c30",
+    "signalTextColor": "#0b1c30",
+    "noteBkgColor": "#fde8e5",
+    "noteTextColor": "#0b1c30",
+    "noteBorderColor": "#fb331e",
+    "sequenceNumberColor": "#ffffff",
+    "activationBkgColor": "#fb331e"
+  }
+}}%%
+sequenceDiagram
+    autonumber
+    actor U as User
+    participant A as Databricks App<br/>(OpenAI Agents SDK)
+    participant FM as Foundation Model<br/>(Claude via AI Gateway)
+    participant LB as Lakebase<br/>(Postgres · agent_openai_memory)
+
+    U->>A: New message + existing session_id
+    Note over A: get_session_id(): use the provided id
+    A->>LB: get_items(session_id) — deduplicate_input
+    LB-->>A: N stored items (thread already has history)
+    Note over A: send only the newest message<br/>(history already persisted)
+    A->>LB: Runner loads full history (get_items, no limit)
+    LB-->>A: full conversation — all N items
+    Note over A: prepend full history,<br/>NO compression / NO summarization
+    A->>FM: system prompt + tools + [ full history ] + [ new message ]
+    FM-->>A: assistant reply
+    A->>LB: add_items([ new user msg, assistant msg ]) — append
+    A-->>U: reply
+    Note over A,FM: Every turn replays the entire thread, so context & cost grow

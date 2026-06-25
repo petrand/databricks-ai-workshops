@@ -13,12 +13,21 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { DbIcon } from '@/components/ui/db-icon';
-import { NewChatIcon, SidebarCollapseIcon, SidebarExpandIcon } from '@/components/icons';
+import {
+  ChecklistIcon,
+  CloudUploadIcon,
+  NewChatIcon,
+  SidebarCollapseIcon,
+  SidebarExpandIcon,
+} from '@/components/icons';
 import { cn } from '@/lib/utils';
 import type { ClientSession } from '@chat-template/auth';
-import { Button } from './ui/button';
 import { Action } from './elements/actions';
 
 export function AppSidebar({
@@ -29,15 +38,13 @@ export function AppSidebar({
   preferredUsername: string | null;
 }) {
   const navigate = useNavigate();
-  const { setOpenMobile, open, openMobile, isMobile, toggleSidebar } = useSidebar();
+  const { setOpenMobile, open, openMobile, isMobile, toggleSidebar } =
+    useSidebar();
 
   const effectiveOpen = open || (isMobile && openMobile);
 
   return (
-    <Sidebar
-      collapsible="icon"
-      className="group-data-[side=left]:border-r-0"
-    >
+    <Sidebar collapsible="icon" className="group-data-[side=left]:border-r-0">
       {/* ── Header: app title + collapse toggle ────────────────────────── */}
       <SidebarHeader
         className={cn(
@@ -51,7 +58,7 @@ export function AppSidebar({
             onClick={() => setOpenMobile(false)}
             className="flex items-center overflow-hidden px-1"
           >
-            <span className="text-base font-semibold text-foreground">
+            <span className="font-semibold text-base text-foreground">
               Chatbot
             </span>
           </Link>
@@ -77,7 +84,7 @@ export function AppSidebar({
               <TooltipTrigger asChild>
                 <SidebarMenuButton
                   type="button"
-                  className="h-8 p-1 md:p-2 cursor-pointer"
+                  className="h-8 cursor-pointer p-1 md:p-2"
                   onClick={() => {
                     setOpenMobile(false);
                     navigate('/');
@@ -89,7 +96,62 @@ export function AppSidebar({
                   </span>
                 </SidebarMenuButton>
               </TooltipTrigger>
-              <TooltipContent side="right" style={{ display: open ? 'none' : 'block' }}>New chat</TooltipContent>
+              <TooltipContent
+                side="right"
+                style={{ display: open ? 'none' : 'block' }}
+              >
+                New chat
+              </TooltipContent>
+            </Tooltip>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SidebarMenuButton
+                  type="button"
+                  className="h-8 cursor-pointer p-1 md:p-2"
+                  onClick={() => {
+                    setOpenMobile(false);
+                    navigate('/dashboard');
+                  }}
+                >
+                  <DbIcon icon={ChecklistIcon} size={16} color="default" />
+                  <span className="group-data-[collapsible=icon]:hidden">
+                    Policies
+                  </span>
+                </SidebarMenuButton>
+              </TooltipTrigger>
+              <TooltipContent
+                side="right"
+                style={{ display: open ? 'none' : 'block' }}
+              >
+                Policies
+              </TooltipContent>
+            </Tooltip>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SidebarMenuButton
+                  type="button"
+                  className="h-8 cursor-pointer p-1 md:p-2"
+                  onClick={() => {
+                    setOpenMobile(false);
+                    navigate('/upload');
+                  }}
+                >
+                  <DbIcon icon={CloudUploadIcon} size={16} color="default" />
+                  <span className="group-data-[collapsible=icon]:hidden">
+                    Add policy
+                  </span>
+                </SidebarMenuButton>
+              </TooltipTrigger>
+              <TooltipContent
+                side="right"
+                style={{ display: open ? 'none' : 'block' }}
+              >
+                Add policy
+              </TooltipContent>
             </Tooltip>
           </SidebarMenuItem>
         </SidebarMenu>

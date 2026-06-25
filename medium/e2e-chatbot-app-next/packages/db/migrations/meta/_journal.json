@@ -22,6 +22,20 @@
       "when": 1772346540471,
       "tag": "0002_polite_red_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781575837235,
+      "tag": "0003_sparkling_radioactive_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781762014716,
+      "tag": "0004_careful_power_man",
+      "breakpoints": true
     }
   ]
 }

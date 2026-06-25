@@ -1,7 +1,13 @@
 
 import logging
+import os
 
-from agents.mcp import MCPServer, MCPServerManager
+from agents.mcp import (
+    MCPServer,
+    MCPServerManager,
+    MCPServerStreamableHttp,
+    MCPServerStreamableHttpParams,
+)
 from typing import AsyncGenerator, List
 
 import mlflow
@@ -38,15 +44,38 @@ mlflow.openai.autolog()
 # GENERATED
 
 NAME = 'my-agent'
-SYSTEM_PROMPT = 'You are a helpful assistant.'
+SYSTEM_PROMPT = (
+    'You are a helpful router assistant for Vicinity Centres. '
+    'You have access to tools via MCP servers and must delegate to the right one:\n'
+    '- For company policy questions (HR, expenses, code of conduct, travel, leave, '
+    'leasing, WHS, IT/security policy, etc.), you have TWO policy tools:\n'
+    '  * "Vicinity Knowledge Assistant" — asks the Agent Bricks Knowledge Assistant '
+    'and returns a curated, synthesized, cited answer. Prefer this for natural '
+    'questions like "what is our policy on...", "am I allowed to...".\n'
+    '  * "Vicinity Policy Search" — vector search that returns the raw matching '
+    'policy passages from the documents. Use this to find or verify specific source '
+    'text, quote exact wording, or when the user asks to see the underlying '
+    'documents/chunks.\n'
+    '- For questions about foot traffic / how busy a centre is / building '
+    'occupancy and visitor counts by date and time, use the "Foot Traffic '
+    'Assistant" (Genie) tool.\n'
+    'Always pass through the policy IDs and citations the policy tools return.'
+)
 MODEL = 'databricks-claude-opus-4-6'
 MCP_SERVERS = [
-    # Add your MCP servers here, e.g.:
-    # ('Vector Search: <catalog>.<schema>.<index>', '/api/2.0/mcp/vector-search/<catalog>/<schema>/<index>'),
-    # ('Genie Space: <name>', '/api/2.0/mcp/genie/<space-id>'),
+    ('Vicinity Policy Search', '/api/2.0/mcp/vector-search/dev/policies/policy_docs_index'),
+    ('Foot Traffic Assistant', '/api/2.0/mcp/genie/01f16ee9c4f313fb8841bd033ac15e9b'),
 ]
 
 # END GENERATED
+
+# Self-hosted MCP server fronting the Agent Bricks Knowledge Assistant. It is
+# mounted into this same app (see ka_mcp.py + start_server.py) and reached over
+# localhost; no Databricks managed MCP server exists for Knowledge Assistants.
+KA_MCP_URL = os.environ.get(
+    "KA_MCP_URL",
+    f"http://127.0.0.1:{os.environ.get('KA_MCP_PORT', '8765')}/mcp",
+)
 
 lakebase_config = init_lakebase_config()
 
@@ -57,7 +86,7 @@ def get_mcp_user_workspace_client():
 
 def init_mcp_servers():
     user_workspace_client = get_mcp_user_workspace_client()
-    return [
+    servers: List[MCPServer] = [
         McpServer(
             name=name,
             url=build_mcp_url(url, user_workspace_client),
@@ -65,6 +94,17 @@ def init_mcp_servers():
         )
         for (name, url) in MCP_SERVERS
     ]
+    # Self-hosted Knowledge Assistant MCP server (plain MCP client over localhost,
+    # no Databricks OAuth needed since it is served by this same app).
+    servers.append(
+        MCPServerStreamableHttp(
+            name="Vicinity Knowledge Assistant",
+            params=MCPServerStreamableHttpParams(url=KA_MCP_URL),
+            client_session_timeout_seconds=120,
+            cache_tools_list=True,
+        )
+    )
+    return servers
 
 def create_agent(mcp_servers: List[MCPServer]) -> Agent:
     return Agent(

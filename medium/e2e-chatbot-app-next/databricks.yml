@@ -4,8 +4,13 @@ bundle:
 variables:
   serving_endpoint_name:
     description: "Name of the model serving endpoint to be used by the app"
-    # TODO: uncomment the line below and specify a default value to avoid needing to specify it on each deployment
-    # default: "your-serving-endpoint-name-goes-here"
+    default: "databricks-claude-sonnet-4"
+  sql_warehouse_id:
+    description: "SQL warehouse id used by the Policy Compliance dashboard"
+    default: "30260ffcfe45ef76"
+  policies_table:
+    description: "Unity Catalog table backing the Policy Compliance dashboard"
+    default: "dev.policies.policy_docs"
   database_instance_name:
     description: "Base name of the Lakebase database instance"
     default: "chatbot-lakebase"
@@ -14,10 +19,9 @@ variables:
 
 resources:
   database_instances:
-    # TODO (optional): Uncomment the database resource below to enable persistent chat history
-    # chatbot_lakebase:
-    #   name: ${var.database_instance_name}-${var.resource_name_suffix}
-    #   capacity: CU_1
+    chatbot_lakebase:
+      name: ${var.database_instance_name}-${var.resource_name_suffix}
+      capacity: CU_1
 
   apps:
     databricks_chatbot:
@@ -35,14 +39,35 @@ resources:
           serving_endpoint:
             name: ${var.serving_endpoint_name}
             permission: CAN_QUERY
-        # TODO (optional): Uncomment the database resource below to bind the app to the database instance above
-        # and enable persistent chat history
-        # - name: database
-        #   description: "Lakebase database instance for the chat app"
-        #   database:
-        #     database_name: databricks_postgres
-        #     instance_name: ${resources.database_instances.chatbot_lakebase.name}
-        #     permission: CAN_CONNECT_AND_CREATE
+        - name: sql-warehouse
+          description: "SQL warehouse for the Policy Compliance dashboard"
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: CAN_USE
+        - name: policy-table
+          description: "Unity Catalog table read by the Policy Compliance dashboard"
+          uc_securable:
+            securable_full_name: ${var.policies_table}
+            securable_type: TABLE
+            permission: SELECT
+        - name: policy-table-write
+          description: "Write access so the app can record reviews, edit policy text, and add uploaded policies"
+          uc_securable:
+            securable_full_name: ${var.policies_table}
+            securable_type: TABLE
+            permission: MODIFY
+        # NOTE: app resources cannot express USE CATALOG / USE SCHEMA (uc_securable only
+        # supports TABLE/VOLUME/FUNCTION/CONNECTION). The dashboard also needs the app's
+        # service principal to have USE on the catalog and schema. Grant once per workspace:
+        #   GRANT USE CATALOG ON CATALOG dev TO `<app-service-principal-client-id>`;
+        #   GRANT USE SCHEMA ON SCHEMA dev.policies TO `<app-service-principal-client-id>`;
+        # (find the client id via: databricks apps get <app-name> | jq .service_principal_client_id)
+        - name: database
+          description: "Lakebase database instance for the chat app"
+          database:
+            database_name: databricks_postgres
+            instance_name: ${resources.database_instances.chatbot_lakebase.name}
+            permission: CAN_CONNECT_AND_CREATE
         # TODO (optional): Uncomment the experiment resource below to enable the feedback widget.
         # First run `npx tsx scripts/get-experiment-id.ts --endpoint <your-endpoint-name>` to find the experiment ID.
         # Note: enabling feedback also requires a database (uncomment both TODO database blocks above).

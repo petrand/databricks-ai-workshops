@@ -10,9 +10,14 @@ sync:
     - "load-test-runs"
 
 resources:
+  database_instances:
+    router_lakebase:
+      name: agent-router-lakebase
+      capacity: CU_1
+
   apps:
     agent_openai_agents_sdk:
-      name: "my-agent-app"
+      name: "agent-vicinity-router"
       description: "OpenAI Agents SDK agent application"
       source_code_path: ./
       config:
@@ -28,41 +33,83 @@ resources:
             value: "3000"
           - name: CHAT_PROXY_TIMEOUT_SECONDS
             value: "300"
+          # The chat proxy only forwards an allowlist of paths to the frontend
+          # (/, /assets/, /api/, /chat/). The PDF-upload flow loads pdf.js from
+          # /pdfjs/*, so that prefix must be allowed through to the chat app.
+          - name: CHAT_PROXY_ALLOWED_PATH_PREFIXES
+            value: "/pdfjs/"
           - name: MLFLOW_EXPERIMENT_ID
-            value_from: "experiment"
-          - name: LAKEBASE_AUTOSCALING_ENDPOINT
-            value_from: "postgres"
+            value: "3907254377919918"
+          - name: LAKEBASE_INSTANCE_NAME
+            value: ${resources.database_instances.router_lakebase.name}
           - name: LAKEBASE_AGENT_MEMORY_SCHEMA
             value: "agent_openai_memory"
           - name: PGDATABASE
             value: "databricks_postgres"
           - name: PGPORT
             value: "5432"
+          # Powers the /dashboard policy-compliance view (see e2e-chatbot-app-next/server/src/routes/policies.ts)
+          - name: DATABRICKS_SQL_WAREHOUSE_ID
+            value_from: "sql-warehouse"
+          - name: POLICIES_TABLE
+            value: "dev.policies.policy_docs"
 
       # Resources which this app has access to
       resources:
         - name: 'experiment'
           experiment:
-            experiment_id: "<your-experiment-id>"
+          #TODO: Replace with the ID of the MLflow experiment you created
+            experiment_id: "3907254377919918"
             permission: 'CAN_MANAGE'
-        - name: 'postgres'
-          postgres:
-            branch: "projects/<your-project>/branches/production"
-            database: "projects/<your-project>/branches/production/databases/databricks-postgres"
-            permission: 'CAN_CONNECT_AND_CREATE'
+        - name: 'policy_docs_index'
+          uc_securable:
+          #TODO: Replace with the full name of the Vector Search index you created
+            securable_full_name: 'dev.policies.policy_docs_index'
+            securable_type: 'TABLE'
+            permission: 'SELECT'
+        - name: 'sql-warehouse'
+          description: "SQL warehouse for the policy-compliance dashboard"
+          sql_warehouse:
+          #TODO: Replace with the ID of the SQL warehouse you created
+            id: '30260ffcfe45ef76'
+            permission: 'CAN_USE'
+        - name: 'policy_docs'
+          #TODO: Replace with the full name of the Unity Catalog table you created
+          description: "Unity Catalog table read by the policy-compliance dashboard"
+          uc_securable:
+            securable_full_name: 'dev.policies.policy_docs'
+            securable_type: 'TABLE'
+            permission: 'SELECT'
+        - name: 'policy_docs_write'
+          description: "Write access so the dashboard can record reviews and edit policy text"
+          uc_securable:
+          #TODO: Replace with the full name of the Unity Catalog table you created
+            securable_full_name: 'dev.policies.policy_docs'
+            securable_type: 'TABLE'
+            permission: 'MODIFY'
+        - name: 'knowledge_assistant_endpoint'
+          description: "Agent Bricks Knowledge Assistant fronted by the in-app MCP server"
+          serving_endpoint:
+          #TODO: Replace with the name of the Knowledge Assistant endpoint you created
+            name: 'ka-502ebc0c-endpoint'
+            permission: 'CAN_QUERY'
+        - name: 'foot_traffic_genie'
+          description: "Foot traffic Genie space queried via managed MCP"
+          genie_space:
+          #TODO: Replace with the name of the Genie space you created
+            name: 'Vicinity Foot Traffic Genie'
+            space_id: '01f16ee9c4f313fb8841bd033ac15e9b'
+            permission: 'CAN_RUN'
+        - name: 'database'
+          database:
+            database_name: databricks_postgres
+            instance_name: ${resources.database_instances.router_lakebase.name}
+            permission: CAN_CONNECT_AND_CREATE
 
 targets:
   dev:
     mode: development
     default: true
     workspace:
-      host: https://<your-workspace>.cloud.databricks.com
-
-  prod:
-    mode: production
-    workspace:
-      host: https://<your-workspace>.cloud.databricks.com
-    resources:
-      apps:
-        agent_openai_agents_sdk:
-          name: my-agent-app
+    #TODO: Replace with the URL of your workspace
+      host: https://dbc-22969be4-7a92.cloud.databricks.com
